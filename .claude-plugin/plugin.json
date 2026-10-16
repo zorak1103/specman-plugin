@@ -1,0 +1,10 @@
+{
+  "name": "specman",
+  "version": "1.0.0",
+  "description": "Erstellt und bearbeitet Specman-Spezifikationen (.nsd, SUCs), migriert Word-Spezifikationen (.docx) nach .nsd und implementiert bzw. synchronisiert Code auf ihrer Basis.",
+  "author": { "name": "zorak1103" },
+  "homepage": "https://github.com/zorak1103/specman-plugin",
+  "repository": "https://github.com/zorak1103/specman-plugin",
+  "license": "MIT",
+  "keywords": ["specman", "spezifikation", "suc", "nsd", "migration", "docx"]
+}

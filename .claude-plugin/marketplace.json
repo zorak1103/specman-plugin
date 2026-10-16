@@ -1,0 +1,16 @@
+{
+  "name": "specman-plugin",
+  "owner": {
+    "name": "zorak1103"
+  },
+  "plugins": [
+    {
+      "name": "specman",
+      "source": "./",
+      "description": "Erstellt und bearbeitet Specman-Spezifikationen (.nsd, SUCs), migriert Word-Spezifikationen (.docx) nach .nsd und implementiert bzw. synchronisiert Code auf ihrer Basis.",
+      "version": "1.0.0",
+      "category": "development"
+    }
+  ],
+  "description": "Claude-Code-Plugin für Specman-Spezifikationen (.nsd, SUCs)."
+}

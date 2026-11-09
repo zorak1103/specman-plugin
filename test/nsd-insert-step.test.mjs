@@ -49,19 +49,19 @@ test('applyInsertStep produces text the sanitizer-compatible AST can re-parse', 
 test('applyInsertStep reports a clear error for an unknown parent key', () => {
   const result = applyInsertStep(src, { parentKey: 'step:nonexistent.body', position: 'end', kind: 'simple', html: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });
 
 test('applyInsertStep rejects an unknown kind', () => {
   const result = applyInsertStep(src, { parentKey: 'main', position: 'end', kind: 'nonsense', html: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /kennt kein Kind/);
+  assert.match(result.error, /does not support kind/);
 });
 
 test('applyInsertStep rejects HTML containing a backtick', () => {
   const result = applyInsertStep(src, { parentKey: 'main', position: 'end', kind: 'simple', html: 'a `quote`' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Backtick/);
+  assert.match(result.error, /backtick/i);
 });
 
 test('applyInsertStep builds a while step with one placeholder step in its body', () => {
@@ -133,7 +133,7 @@ test('applyInsertStep builds a case step with a custom number of case branches',
 test('applyInsertStep rejects fewer than 2 case branches', () => {
   const result = applyInsertStep(src, { parentKey: 'main', position: 'end', kind: 'case', html: 'switch', branches: 1 });
   assert.equal(result.ok, false);
-  assert.match(result.error, /mindestens 2/);
+  assert.match(result.error, /at least 2/);
 });
 
 test('applyInsertStep produces structured steps whose branch headings are addressable and settable', () => {
@@ -179,6 +179,6 @@ test('--id must be unique diagram-wide, including inside catch bodies', () => {
   for (const taken of ['6131450e', '92dc561b']) {
     const r = applyInsertStep(withCatch, { parentKey: 'main', position: 'end', kind: 'simple', html: 'x', id: taken });
     assert.equal(r.ok, false);
-    assert.match(r.error, /eindeutig|bereits/);
+    assert.match(r.error, /unique|already/);
   }
 });

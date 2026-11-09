@@ -75,7 +75,7 @@ function main() {
 
   if (args.set !== undefined) {
     if (args.value === undefined) {
-      report({ ok: false, error: '--set <key> braucht zusätzlich --value <wert>.' }, { json });
+      report({ ok: false, error: '--set <key> also needs --value <value>.' }, { json });
       return;
     }
     setConfigValue(configPath, args.set, args.value);
@@ -83,7 +83,7 @@ function main() {
     return;
   }
 
-  report({ ok: false, error: 'Erwarte --get <key>, --set <key> --value <wert>, oder --abbreviate-name "<Name>".' }, { json });
+  report({ ok: false, error: 'Expected --get <key>, --set <key> --value <value>, or --abbreviate-name "<Name>".' }, { json });
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) main();

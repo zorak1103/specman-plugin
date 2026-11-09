@@ -61,7 +61,7 @@ export function parseSanitizeOutput(rawStdout, exitCode) {
 
   return {
     ok: false,
-    error: `unerwartete Sanitizer-Ausgabe (weder OK/SANITIZED/ERROR): ${JSON.stringify(status)}`,
+    error: `unexpected sanitizer output (neither OK/SANITIZED/ERROR): ${JSON.stringify(status)}`,
     exitCode,
   };
 }
@@ -71,7 +71,7 @@ export function parseSanitizeOutput(rawStdout, exitCode) {
 // while SanitizeCLO's own controlled OK/SANITIZED/duplicate-ID/unresolvable-steplink paths print
 // to stdout. Prefer stdout when it already has a recognized status line; otherwise fall back to
 // stderr (or back to stdout if stderr is empty too, so a genuinely unrecognized failure still
-// surfaces via the normal "unerwartete Sanitizer-Ausgabe" path instead of silently vanishing).
+// surfaces via the normal "unexpected sanitizer output" path instead of silently vanishing).
 export function pickOutputStream(stdout, stderr) {
   if (/^(OK|SANITIZED|ERROR)\b/.test(stdout.trim())) return stdout;
   return stderr || stdout;
@@ -80,7 +80,7 @@ export function pickOutputStream(stdout, stderr) {
 export function runSanitize(jarPath, filePath) {
   const proc = spawnSync('java', ['-jar', jarPath, '--sanitize', filePath], { encoding: 'utf8' });
   if (proc.error) {
-    return { ok: false, error: `java konnte nicht gestartet werden: ${proc.error.message}` };
+    return { ok: false, error: `could not start java: ${proc.error.message}` };
   }
   const output = pickOutputStream(proc.stdout ?? '', proc.stderr ?? '');
   return parseSanitizeOutput(output, proc.status ?? 1);
@@ -119,18 +119,18 @@ export function attachWarnings(result, warnings) {
 }
 
 function plainSummary(r) {
-  if (r.status === 'OK') return 'OK — keine Änderungen.';
-  const parts = [`SANITIZED — ${r.stepNumberChanges.length} Schrittnummer(n) geändert`];
-  if (r.steplinkUpdates.length) parts.push(`${r.steplinkUpdates.length} Steplink(s) aktualisiert`);
-  if (r.plainTextFieldsRefreshed) parts.push(`${r.plainTextFieldsRefreshed} plain=-Feld(er) aufgefrischt`);
-  if (r.stable === false) parts.push('NICHT stabil (zweiter Lauf ändert die Datei erneut)');
+  if (r.status === 'OK') return 'OK — no changes.';
+  const parts = [`SANITIZED — ${r.stepNumberChanges.length} step number(s) changed`];
+  if (r.steplinkUpdates.length) parts.push(`${r.steplinkUpdates.length} steplink(s) updated`);
+  if (r.plainTextFieldsRefreshed) parts.push(`${r.plainTextFieldsRefreshed} plain= field(s) refreshed`);
+  if (r.stable === false) parts.push('NOT stable (a second run changes the file again)');
   return parts.join(', ');
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
-    report({ ok: false, error: '--file ist Pflicht.' }, { json: !!args.json });
+    report({ ok: false, error: '--file is required.' }, { json: !!args.json });
     return;
   }
   const jar = resolveJarPath(process.env);
@@ -154,7 +154,7 @@ function main() {
   );
   report(result, {
     json: !!args.json,
-    plainText: (r) => [plainSummary(r), ...(r.warnings ?? []).map((w) => `WARNUNG: ${w}`)].join('\n'),
+    plainText: (r) => [plainSummary(r), ...(r.warnings ?? []).map((w) => `WARNING: ${w}`)].join('\n'),
   });
 }
 

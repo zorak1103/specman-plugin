@@ -41,5 +41,5 @@ test('computeMarkups self-check: rejects an out-of-range span rather than writin
   // Simulates a diff bug producing an out-of-bounds span; computeMarkups must refuse to trust it.
   const result = computeMarkups({ oldPlain: 'a', newPlain: 'ab', changeset: 'yellow', __forceSpan: { from: 5, to: 9 } });
   assert.equal(result.ok, false);
-  assert.match(result.error, /außerhalb|out of range/i);
+  assert.match(result.error, /out of range/i);
 });

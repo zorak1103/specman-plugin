@@ -204,6 +204,6 @@ test('catchTargetFor picks the break sequence, or the nearest ancestor that may 
   assert.equal(catchTargetFor(ast, '074ad64c').key, 'main');
   assert.equal(catchTargetFor(ast, '79866663').key, 'step:e81623e9.body');
   assert.equal(catchTargetFor(ast, '79866663', 'main').key, 'main');
-  assert.throws(() => catchTargetFor(ast, '79866663', 'step:fde99ef2.default_branch'), /Vorfahr|catch/);
+  assert.throws(() => catchTargetFor(ast, '79866663', 'step:fde99ef2.default_branch'), /ancestor|catch/);
   assert.throws(() => catchTargetFor(ast, '5582897d'), /break/);
 });

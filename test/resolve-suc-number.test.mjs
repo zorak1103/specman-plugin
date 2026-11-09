@@ -68,5 +68,5 @@ test('proposes the next free grandchild sub-number under a specific parent', () 
 test('reports a clear error when the directory does not exist', () => {
   const result = proposeSucNumber('C:/nonexistent/dir', { parent: undefined });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });

@@ -11,7 +11,7 @@ test('readZip lists and reads stored entries', () => {
 });
 
 test('readZip rejects non-zip input', () => {
-  assert.throws(() => readZip(Buffer.from('definitely not a zip file, just text')), /kein gültiges ZIP/);
+  assert.throws(() => readZip(Buffer.from('definitely not a zip file, just text')), /not a valid ZIP/);
 });
 
 test('parseXml handles attributes, entities, self-closing tags and comments', () => {
@@ -22,7 +22,7 @@ test('parseXml handles attributes, entities, self-closing tags and comments', ()
 });
 
 test('parseXml rejects mismatched tags', () => {
-  assert.throws(() => parseXml('<a><b></a>'), /End-Tag/);
+  assert.throws(() => parseXml('<a><b></a>'), /end tag/);
 });
 
 test('extractDocx returns paragraphs with style, formatting and ids', () => {
@@ -87,7 +87,7 @@ test('extractDocx finds embedded images, writes them via the sink and warns for 
   assert.equal(images[0].widthPx, 100);
   assert.equal(images[0].file, '/out/i1.png');
   assert.deepEqual(written[0], ['i1.png', TINY_PNG.length]);
-  assert.match(warnings.join('\n'), /jpeg.*nicht PNG/);
+  assert.match(warnings.join('\n'), /jpeg.*not PNG/);
 });
 
 test('extractDocx takes only the Choice branch of mc:AlternateContent (no duplicated drawings)', () => {
@@ -120,4 +120,14 @@ test('renderOutline lists ids so a plan can reference them', () => {
   assert.match(text, /p1 \[X\] Hallo/);
   assert.match(text, /t1 TABLE/);
   assert.match(text, /p2 \[-\] Zelle/);
+});
+
+test('extractDocx detects a history table with English headers', () => {
+  const body = table(
+    row(cell(para('Version')), cell(para('Activity')), cell(para('Author')), cell(para('Date')), cell(para('Follow-up'))),
+    row(cell(para('0.1')), cell(para('Initial creation')), cell(para('A. B.')), cell(para('01.01.2026')), cell(para('Review'))),
+  );
+  const { history } = extractDocx(makeDocx(body));
+  assert.equal(history.tableId, 't1');
+  assert.equal(history.rows[0][1], 'Initial creation');
 });

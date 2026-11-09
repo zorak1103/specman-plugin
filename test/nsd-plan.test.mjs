@@ -15,7 +15,7 @@ const TEMPLATE = readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'reference', 'suc-template.nsd'), 'utf8',
 );
 
-// p1 Beschreibung, p2 Vorbedingung, p3 Nachbedingung, p4..p6 Schritte, p7 Titel-Rest
+// p1 description, p2 precondition, p3 postcondition, p4..p6 steps, p7 title remainder
 function fixture(extraBody = '', extra = {}, rels = '') {
   const body = para('Beschreibung des Ablaufs') + para('Der User ist angemeldet.', { num: { id: 1 } }) +
     para('Ergebnis liegt vor.', { num: { id: 1 } }) + para('Der User klickt.') + para('Das System speichert.') +
@@ -45,7 +45,7 @@ const basePlan = () => ({
       { kind: 'simple', content: { ref: 'p5' } },
     ],
   },
-  ignored: [{ ids: ['p6'], reason: 'wird in einem eigenen Test verwendet' }],
+  ignored: [{ ids: ['p6'], reason: 'used in a test of its own' }],
 });
 
 test('buildFromPlan fills title, description, actors, conditions and steps', () => {
@@ -69,7 +69,7 @@ test('buildFromPlan refuses System/User as label — step texts carry no actor p
     plan.main.steps[0].content = { ref: 'p4', label };
     const result = buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() });
     assert.equal(result.ok, false, label);
-    assert.match(result.error, /ohne Präfix 'System:'\/'User:'/);
+    assert.match(result.error, /no 'System:'\/'User:' prefix/);
   }
 });
 
@@ -86,7 +86,7 @@ test('buildFromPlan fails when docx content is neither used nor ignored — no l
   plan.ignored = [];
   const result = buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() });
   assert.equal(result.ok, false);
-  assert.match(result.error, /es darf keine Logik verloren gehen/);
+  assert.match(result.error, /no logic may be lost/);
   assert.deepEqual(result.unreferenced.map((u) => u.id), ['p6']);
 });
 
@@ -157,11 +157,11 @@ test('buildFromPlan builds case (default + >=2 branches) and loops', () => {
 test('buildFromPlan refuses structures the grammar forbids (empty body, case with one branch)', () => {
   const emptyBody = basePlan();
   emptyBody.main.steps = [{ kind: 'subsequence', content: 'x', body: [] }];
-  assert.match(buildFromPlan({ templateText: TEMPLATE, plan: emptyBody, extract: fixture() }).error, /mindestens einen Schritt/);
+  assert.match(buildFromPlan({ templateText: TEMPLATE, plan: emptyBody, extract: fixture() }).error, /at least one step/);
 
   const oneCase = basePlan();
   oneCase.main.steps = [{ kind: 'case', content: 'x', defaultBranch: { body: [{ kind: 'simple', content: 'a' }] }, caseBranches: [{ body: [{ kind: 'simple', content: 'b' }] }] }];
-  assert.match(buildFromPlan({ templateText: TEMPLATE, plan: oneCase, extract: fixture() }).error, /mindestens 2 caseBranches/);
+  assert.match(buildFromPlan({ templateText: TEMPLATE, plan: oneCase, extract: fixture() }).error, /at least 2 caseBranches/);
 });
 
 test('buildFromPlan wires break steps to catch blocks (incl. coCatches) in the main sequence', () => {
@@ -174,7 +174,7 @@ test('buildFromPlan wires break steps to catch blocks (incl. coCatches) in the m
     ],
     catches: [{ breakIds: ['ungueltig', 'abbruch'], content: { ref: 'p6' }, body: [{ kind: 'simple', content: 'Meldung anzeigen' }] }],
   };
-  plan.ignored = [{ ids: ['p5'], reason: 'nicht Teil dieses Tests' }];
+  plan.ignored = [{ ids: ['p5'], reason: 'not part of this test' }];
   const result = buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() });
   assert.equal(result.ok, true, result.error);
   const ast = parseDiagram(result.text);
@@ -188,7 +188,7 @@ test('buildFromPlan wires break steps to catch blocks (incl. coCatches) in the m
 test('buildFromPlan rejects a catch for an unknown or foreign break', () => {
   const plan = basePlan();
   plan.main.catches = [{ breakId: 'gibtsnicht', content: 'x', body: [{ kind: 'simple', content: 'y' }] }];
-  assert.match(buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() }).error, /unbekannter Abbruch-Schritt/);
+  assert.match(buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() }).error, /unknown break step/);
 });
 
 test('buildFromPlan turns list paragraphs of a step ref into a list area and nests are flattened with a warning', () => {
@@ -202,7 +202,7 @@ test('buildFromPlan turns list paragraphs of a step ref into a list area and nes
   assert.equal(list.kind, 'list');
   assert.equal(list.items.length, 2);
   assert.match(list.items[1].content.head.html, /^(&#160;)+- Unterpunkt$/);
-  assert.match(result.warnings.join('\n'), /verschachtelte Listenebenen/);
+  assert.match(result.warnings.join('\n'), /nested list levels/);
 });
 
 test('buildFromPlan converts an extract table, resolves merged cells with a warning', () => {
@@ -216,7 +216,7 @@ test('buildFromPlan converts an extract table, resolves merged cells with a warn
   const area = parseDiagram(result.text).mainSequence.steps[1].content.tail[0];
   assert.equal(area.kind, 'table');
   assert.equal(area.rows[1].cells.length, 2);
-  assert.match(result.warnings.join('\n'), /verbundene Zellen/);
+  assert.match(result.warnings.join('\n'), /merged cells/);
 });
 
 test('buildFromPlan embeds an extracted image and fails if an image is left unreferenced', () => {
@@ -260,7 +260,7 @@ test('buildFromPlan escapes plain text content (umlauts, ampersand, backtick)', 
 
 test('ignoredIds expands table ids to the paragraphs inside', () => {
   const extract = fixture(table(row(cell(para('in Tabelle')))));
-  const result = ignoredIds(extract, [{ ids: ['t1'], reason: 'ganze Tabelle' }]);
+  const result = ignoredIds(extract, [{ ids: ['t1'], reason: 'whole table' }]);
   assert.equal(result.ok, true);
   assert.equal(result.ids.has('p7'), true);
 });
@@ -272,7 +272,7 @@ test('buildFromPlan flatLists on a ref makes a single list paragraph the step te
   plan.ignored = [{ ids: ['p5', 'p6'], reason: 'unbenutzt' }];
   const warned = buildFromPlan({ templateText: TEMPLATE, plan, extract });
   assert.equal(warned.ok, true, warned.error);
-  assert.match(warned.warnings.join(' '), /leeren Schritttext.*flatLists/);
+  assert.match(warned.warnings.join(' '), /empty step text.*flatLists/);
 
   plan.main.steps[1].content = { ref: 'p7', flatLists: true };
   const flat = buildFromPlan({ templateText: TEMPLATE, plan, extract });
@@ -286,7 +286,7 @@ test('buildFromPlan flatLists on a ref makes a single list paragraph the step te
 test('buildFromPlan accepts reworded paragraphs as covered and reports them separately from ignored', () => {
   const plan = basePlan();
   plan.main.steps[1].content = 'Wurde der Ablauf gespeichert?';
-  plan.reworded = [{ ids: ['p5'], reason: 'Zu Frage umformuliert (Freigabe des Nutzers)' }];
+  plan.reworded = [{ ids: ['p5'], reason: 'Reworded into a question (approved by the user)' }];
   const result = buildFromPlan({ templateText: TEMPLATE, plan, extract: fixture() });
   assert.equal(result.ok, true, result.error);
   assert.deepEqual(result.reworded[0].entries.map((e) => e.id), ['p5']);

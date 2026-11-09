@@ -249,5 +249,5 @@ test('assertValidHtml accepts ordinary HTML without backticks', () => {
 });
 
 test('assertValidHtml rejects a backtick, which would prematurely end the BACKTICK_STRING token', () => {
-  assert.throws(() => assertValidHtml('a `quote` inside'), /Backtick/);
+  assert.throws(() => assertValidHtml('a `quote` inside'), /backtick/);
 });

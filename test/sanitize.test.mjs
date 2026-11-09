@@ -57,7 +57,7 @@ test('parses a SANITIZED result with CRLF line endings (real jar output on Windo
 test('treats unrecognized first-line output as an error rather than guessing', () => {
   const result = parseSanitizeOutput('SOMETHING UNEXPECTED\n', 1);
   assert.equal(result.ok, false);
-  assert.match(result.error, /unerwartete Sanitizer-Ausgabe/);
+  assert.match(result.error, /unexpected sanitizer output/);
 });
 
 test('pickOutputStream uses stdout when it has a recognized status line', () => {

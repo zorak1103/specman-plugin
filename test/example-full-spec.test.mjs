@@ -31,7 +31,7 @@ function step(text, fn) {
 
 function sectionKey(text, target, heading) {
   const found = locate(text, target).sections.find((s) => s.heading === heading);
-  assert.ok(found, `Abschnitt '${heading}' in ${target} nicht gefunden`);
+  assert.ok(found, `section '${heading}' not found in ${target}`);
   return found.areaKey;
 }
 

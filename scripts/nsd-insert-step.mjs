@@ -17,7 +17,7 @@
 // `insertedStepId` (see `nsd-paths.mjs`), and each placeholder leaf step via its own ID in
 // `placeholderStepIds`.
 //
-// `--id` keeps a step's ID when it moves between specs (code references `SUC-xxx Schritt N (ID: ...)`
+// `--id` keeps a step's ID when it moves between specs (code references `SUC-xxx Step N (ID: ...)`
 // stay valid): optional, 8 lowercase hex digits, unique diagram-wide — otherwise an error, never a
 // silently different ID. The step NUMBER stays a placeholder either way (the sanitizer renumbers).
 //
@@ -74,7 +74,7 @@ export function applyInsertStep(text, { parentKey, position, kind, html, branche
   if (!SUPPORTED_KINDS.has(kind)) {
     return {
       ok: false,
-      error: `nsd-insert-step kennt kein Kind '${kind}' (erwartet: ${[...SUPPORTED_KINDS].join('|')}).`,
+      error: `nsd-insert-step does not support kind '${kind}' (expected: ${[...SUPPORTED_KINDS].join('|')}).`,
     };
   }
   try {
@@ -84,7 +84,7 @@ export function applyInsertStep(text, { parentKey, position, kind, html, branche
   }
   const branchCount = kind === 'case' ? (branches ?? DEFAULT_CASE_BRANCHES) : undefined;
   if (kind === 'case' && (!Number.isInteger(branchCount) || branchCount < 2)) {
-    return { ok: false, error: `nsd-insert-step: 'case' braucht mindestens 2 Case-Branches (--branches, Default ${DEFAULT_CASE_BRANCHES}), erhalten: ${branches}.` };
+    return { ok: false, error: `nsd-insert-step: 'case' needs at least 2 case branches (--branches, default ${DEFAULT_CASE_BRANCHES}), got: ${branches}.` };
   }
 
   let ast;
@@ -95,7 +95,7 @@ export function applyInsertStep(text, { parentKey, position, kind, html, branche
   }
 
   const sequence = listSequences(ast).find((s) => s.key === parentKey);
-  if (!sequence) return { ok: false, error: `Sequenz nicht gefunden: ${parentKey}` };
+  if (!sequence) return { ok: false, error: `Sequence not found: ${parentKey}` };
 
   const usedIds = collectStepIds(ast);
   const usedNums = collectStepNums(ast);
@@ -127,10 +127,10 @@ export function applyInsertStep(text, { parentKey, position, kind, html, branche
   } else if (position.startsWith('after:')) {
     const afterId = position.slice('after:'.length);
     const idx = sequence.steps.findIndex((s) => s.stepId === afterId);
-    if (idx === -1) return { ok: false, error: `Schritt für 'after:' nicht in dieser Sequenz gefunden: ${afterId}` };
+    if (idx === -1) return { ok: false, error: `Step for 'after:' not found in this sequence: ${afterId}` };
     sequence.steps.splice(idx + 1, 0, newStep);
   } else {
-    return { ok: false, error: `Ungültige position: '${position}' (erwartet: start, end, oder after:<stepId>)` };
+    return { ok: false, error: `Invalid position: '${position}' (expected: start, end, or after:<stepId>)` };
   }
 
   return {
@@ -145,7 +145,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   for (const required of ['file', 'parent', 'position', 'kind', 'html']) {
     if (args[required] === undefined) {
-      report({ ok: false, error: `--${required} ist Pflicht.` }, { json: !!args.json });
+      report({ ok: false, error: `--${required} is required.` }, { json: !!args.json });
       return;
     }
   }
@@ -153,7 +153,7 @@ function main() {
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json: !!args.json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json: !!args.json });
     return;
   }
   const branches = args.branches !== undefined ? Number(args.branches) : undefined;
@@ -166,8 +166,8 @@ function main() {
     {
       json: !!args.json,
       plainText: (r) => (r.placeholderStepIds.length > 0
-        ? `eingefügt, neue ID: ${r.insertedStepId}, Platzhalter (bitte sofort befüllen): ${r.placeholderStepIds.join(', ')}`
-        : `eingefügt, neue ID: ${r.insertedStepId}`),
+        ? `inserted, new ID: ${r.insertedStepId}, placeholders (fill in immediately): ${r.placeholderStepIds.join(', ')}`
+        : `inserted, new ID: ${r.insertedStepId}`),
     },
   );
 }

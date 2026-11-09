@@ -51,23 +51,23 @@ function resolveInsertIndex(position, arrayLength, afterPattern, describeAfter) 
   if (position === 'start') return 0;
   if (position === 'end') return arrayLength;
   const m = typeof position === 'string' && position.match(afterPattern);
-  if (!m) throw new Error(`nsd-area: ungültige position '${position}' (erwartet: start, end, oder ${describeAfter}).`);
+  if (!m) throw new Error(`nsd-area: invalid position '${position}' (expected: start, end, or ${describeAfter}).`);
   const afterIndex = Number(m[1]);
   if (!(afterIndex >= 0 && afterIndex < arrayLength)) {
-    throw new Error(`nsd-area: position '${position}' verweist auf einen nicht existierenden Index (0..${arrayLength - 1}).`);
+    throw new Error(`nsd-area: position '${position}' refers to a non-existent index (0..${arrayLength - 1}).`);
   }
   return afterIndex + 1;
 }
 
 function validateRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error('nsd-area: --rows braucht mindestens eine Zeile.');
+    throw new Error('nsd-area: --rows needs at least one row.');
   }
   const colCount = rows[0].length;
-  if (colCount === 0) throw new Error('nsd-area: --rows-Zeilen brauchen mindestens eine Zelle.');
+  if (colCount === 0) throw new Error('nsd-area: --rows rows need at least one cell.');
   for (const row of rows) {
     if (!Array.isArray(row) || row.length !== colCount) {
-      throw new Error(`nsd-area: --rows ist nicht rechteckig — jede Zeile braucht ${colCount} Zellen.`);
+      throw new Error(`nsd-area: --rows is not rectangular — every row needs ${colCount} cells.`);
     }
     for (const cell of row) assertValidHtml(cell);
   }
@@ -77,11 +77,11 @@ function validateRows(rows) {
 function validateCols(cols, colCount) {
   if (cols === undefined) return;
   if (!Array.isArray(cols) || cols.length !== colCount) {
-    throw new Error(`nsd-area: --cols muss genau ${colCount} Einträge haben (eine je Spalte).`);
+    throw new Error(`nsd-area: --cols must have exactly ${colCount} entries (one per column).`);
   }
   for (const c of cols) {
     if (typeof c !== 'string' || !PERCENT_RE.test(c)) {
-      throw new Error(`nsd-area: --cols-Eintrag '${c}' ist kein gültiger Prozentwert (z. B. '30%').`);
+      throw new Error(`nsd-area: --cols entry '${c}' is not a valid percentage (e.g. '30%').`);
     }
   }
 }
@@ -89,17 +89,17 @@ function validateCols(cols, colCount) {
 function validateWidth(width) {
   if (width === undefined) return '100%';
   if (typeof width !== 'string' || !PERCENT_RE.test(width)) {
-    throw new Error(`nsd-area: --width '${width}' ist kein gültiger Prozentwert (z. B. '100%').`);
+    throw new Error(`nsd-area: --width '${width}' is not a valid percentage (e.g. '100%').`);
   }
   return width;
 }
 
 function buildTextArea(html, heading, text, changeset) {
   if (html === undefined && heading === undefined) {
-    throw new Error('nsd-area: insert --kind text braucht --html oder --heading (optional mit --text).');
+    throw new Error('nsd-area: insert --kind text needs --html or --heading (optionally with --text).');
   }
   if (html !== undefined && heading !== undefined) {
-    throw new Error('nsd-area: --html und --heading schließen sich aus.');
+    throw new Error('nsd-area: --html and --heading are mutually exclusive.');
   }
   if (html !== undefined) assertValidHtml(html);
   else html = sectionHtml(heading, text);
@@ -108,10 +108,10 @@ function buildTextArea(html, heading, text, changeset) {
 
 function buildListArea(ordered, items, changeset) {
   if (typeof ordered !== 'boolean') {
-    throw new Error("nsd-area: --ordered ist Pflicht und muss 'true' oder 'false' sein (kein stiller Default).");
+    throw new Error("nsd-area: --ordered is required and must be 'true' or 'false' (no silent default).");
   }
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('nsd-area: --items braucht mindestens ein Element.');
+    throw new Error('nsd-area: --items needs at least one element.');
   }
   for (const html of items) assertValidHtml(html);
   return {
@@ -148,7 +148,7 @@ function newAreaKeysUnder(step, tailIndex) {
 
 function applyInsert(step, { kind, position, html, heading, text, ordered, items, rows, cols, width, changeset }) {
   if (!AREA_KINDS.has(kind)) {
-    return { ok: false, error: `nsd-area: --op insert kennt kein Kind '${kind}' (erwartet: ${[...AREA_KINDS].join('|')}).` };
+    return { ok: false, error: `nsd-area: --op insert does not support kind '${kind}' (expected: ${[...AREA_KINDS].join('|')}).` };
   }
   let area;
   try {
@@ -181,14 +181,14 @@ function applyAddRow(step, { areaKey, position, cells }) {
     return { ok: false, error: e.message };
   }
   const { area, index: tailIndex } = resolved;
-  if (area.kind !== 'table') return { ok: false, error: `nsd-area: '${areaKey}' ist keine Tabelle.` };
-  if (!Array.isArray(cells)) return { ok: false, error: 'nsd-area: --cells muss ein JSON-Array sein.' };
+  if (area.kind !== 'table') return { ok: false, error: `nsd-area: '${areaKey}' is not a table.` };
+  if (!Array.isArray(cells)) return { ok: false, error: 'nsd-area: --cells must be a JSON array.' };
   // area.rows[0] is undefined once every row has been removed — fall back to the table's own
   // `cols` (still authoritative for the column count even with zero rows) so a caller can't slip
   // a row with the wrong cell count past validation just because the table happens to be empty.
   const colCount = area.rows[0]?.cells.length ?? area.cols?.length;
   if (colCount !== undefined && cells.length !== colCount) {
-    return { ok: false, error: `nsd-area: --cells braucht ${colCount} Einträge (Spaltenzahl der Tabelle), erhalten: ${cells.length}.` };
+    return { ok: false, error: `nsd-area: --cells needs ${colCount} entries (the table's column count), got: ${cells.length}.` };
   }
   try {
     for (const html of cells) assertValidHtml(html);
@@ -222,7 +222,7 @@ function applyAddItem(step, { areaKey, position, html, changeset }) {
     return { ok: false, error: e.message };
   }
   const { area, index: tailIndex } = resolved;
-  if (area.kind !== 'list') return { ok: false, error: `nsd-area: '${areaKey}' ist keine Liste.` };
+  if (area.kind !== 'list') return { ok: false, error: `nsd-area: '${areaKey}' is not a list.` };
   try {
     assertValidHtml(html);
   } catch (e) {
@@ -249,16 +249,16 @@ function applyRemove(step, { areaKey, changeset }) {
   }
   const { area, index } = resolved;
   if (resolved.row !== undefined || resolved.item !== undefined) {
-    return { ok: false, error: `nsd-area: '${areaKey}' adressiert eine Zeile oder ein Item, nicht eine ganze Area — nutze remove-row/remove-item.` };
+    return { ok: false, error: `nsd-area: '${areaKey}' addresses a row or an item, not a whole area — use remove-row/remove-item.` };
   }
   if (area.kind === 'image') {
-    return { ok: false, error: 'nsd-area: image-Areas werden von diesem Plugin nie verändert.' };
+    return { ok: false, error: 'nsd-area: image areas are never modified by this plugin.' };
   }
   if (changeset) {
     if (area.kind === 'list') {
       return {
         ok: false,
-        error: "nsd-area: eine 'list'-Area hat laut Grammatik keinen change-Slot — entferne einzelne Items per remove-item, oder ohne --changeset ganz löschen.",
+        error: "nsd-area: per the grammar, a 'list' area has no change slot — remove individual items with remove-item, or delete the whole area without --changeset.",
       };
     }
     area.change = removedChange(changeset);
@@ -276,7 +276,7 @@ function applyRemoveItem(step, { areaKey, changeset }) {
     return { ok: false, error: e.message };
   }
   const { area, item, index } = resolved;
-  if (item === undefined) return { ok: false, error: `nsd-area: '${areaKey}' adressiert kein Listen-Item.` };
+  if (item === undefined) return { ok: false, error: `nsd-area: '${areaKey}' does not address a list item.` };
   if (changeset) {
     item.change = removedChange(changeset);
     return { ok: true };
@@ -293,11 +293,11 @@ function applyRemoveRow(step, { areaKey, changeset }) {
     return { ok: false, error: e.message };
   }
   const { area, row, index } = resolved;
-  if (row === undefined) return { ok: false, error: `nsd-area: '${areaKey}' adressiert keine Tabellenzeile.` };
+  if (row === undefined) return { ok: false, error: `nsd-area: '${areaKey}' does not address a table row.` };
   if (changeset) {
     return {
       ok: false,
-      error: 'nsd-area: eine Tabellenzeile (tableRow) hat laut Grammatik keinen change-Slot — Zeilen-Entfernung mit Tracking bleibt eine manuelle Specman-Aktion.',
+      error: 'nsd-area: per the grammar, a table row (tableRow) has no change slot — removing a row with tracking remains a manual Specman action.',
     };
   }
   area.rows.splice(index, 1);
@@ -319,7 +319,7 @@ export function applyArea(text, opts) {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-  if (!found) return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+  if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
 
   let result;
   if (opts.op === 'insert') result = applyInsert(found.step, opts);
@@ -328,7 +328,7 @@ export function applyArea(text, opts) {
   else if (opts.op === 'remove') result = applyRemove(found.step, opts);
   else if (opts.op === 'remove-item') result = applyRemoveItem(found.step, opts);
   else if (opts.op === 'remove-row') result = applyRemoveRow(found.step, opts);
-  else return { ok: false, error: `nsd-area: unbekannte --op '${opts.op}' (erwartet: insert, add-row, add-item, remove, remove-item, remove-row).` };
+  else return { ok: false, error: `nsd-area: unknown --op '${opts.op}' (expected: insert, add-row, add-item, remove, remove-item, remove-row).` };
 
   if (!result.ok) return result;
   return { ...result, text: serializeDiagram(ast) };
@@ -339,7 +339,7 @@ function parseJsonArg(args, key) {
   try {
     return { ok: true, value: JSON.parse(args[key]) };
   } catch (e) {
-    return { ok: false, error: `--${key} ist kein gültiges JSON: ${e.message}` };
+    return { ok: false, error: `--${key} is not valid JSON: ${e.message}` };
   }
 }
 
@@ -348,7 +348,7 @@ function main() {
   args.step = args.step ?? args.block;
   for (const required of ['file', 'step', 'op']) {
     if (args[required] === undefined) {
-      report({ ok: false, error: `--${required} ist Pflicht.` }, { json: !!args.json });
+      report({ ok: false, error: `--${required} is required.` }, { json: !!args.json });
       return;
     }
   }
@@ -356,7 +356,7 @@ function main() {
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json: !!args.json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json: !!args.json });
     return;
   }
 

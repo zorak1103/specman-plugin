@@ -41,10 +41,10 @@ export function freshStepId(usedIds) {
 /** Validates a caller-supplied step ID (format + diagram-wide uniqueness) and reserves it in `usedIds`. */
 export function reserveStepId(id, usedIds) {
   if (!STEP_ID_RE.test(id)) {
-    throw new Error(`nsd-build: --id muss genau 8 Hex-Zeichen (0-9, a-f, klein) haben, erhalten: '${id}'.`);
+    throw new Error(`nsd-build: --id must be exactly 8 hex characters (0-9, a-f, lowercase), got: '${id}'.`);
   }
   if (usedIds.has(id)) {
-    throw new Error(`nsd-build: Schritt-ID '${id}' ist bereits vergeben — --id muss diagrammweit eindeutig sein.`);
+    throw new Error(`nsd-build: step id '${id}' is already in use — --id must be unique across the diagram.`);
   }
   usedIds.add(id);
   return id;

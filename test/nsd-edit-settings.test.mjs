@@ -74,7 +74,7 @@ test('setSetting creates settings and pdfOptions from scratch when absent', () =
 test('setSetting rejects a non-integer value for an int field', () => {
   const result = setSetting(srcWithSettings, { key: 'width', value: 'not-a-number' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Ganzzahl/);
+  assert.match(result.error, /integer/);
 });
 
 test('setSetting rejects a non-bool value for a bool field', () => {
@@ -86,19 +86,19 @@ test('setSetting rejects a non-bool value for a bool field', () => {
 test('setSetting rejects an unknown top-level key', () => {
   const result = setSetting(srcWithSettings, { key: 'nonsense', value: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Unbekannter settings-Schlüssel/);
+  assert.match(result.error, /Unknown settings key/);
 });
 
 test('setSetting rejects an unknown pdfOptions key', () => {
   const result = setSetting(srcWithSettings, { key: 'pdfOptions.nonsense', value: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Unbekannter pdfOptions-Schlüssel/);
+  assert.match(result.error, /Unknown pdfOptions key/);
 });
 
 test('setSetting rejects a backtick in a string value', () => {
   const result = setSetting(srcWithSettings, { key: 'pdfOptions.filename', value: 'evil`backtick.pdf' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Backtick/);
+  assert.match(result.error, /backtick/);
 });
 
 test('setSetting round-trips through parse/serialize/parse without throwing', () => {

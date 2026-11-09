@@ -22,21 +22,21 @@ const PDF_OPTION_TYPES = { filename: 'string', modelFilename: 'string', pageSize
 function coerce(type, raw) {
   if (type === 'int') {
     const n = Number(raw);
-    if (!Number.isInteger(n)) return { ok: false, error: `Erwarte eine Ganzzahl, erhalten: '${raw}'` };
+    if (!Number.isInteger(n)) return { ok: false, error: `Expected an integer, got: '${raw}'` };
     return { ok: true, value: n };
   }
   if (type === 'bool') {
     if (raw === 'true') return { ok: true, value: true };
     if (raw === 'false') return { ok: true, value: false };
-    return { ok: false, error: `Erwarte 'true' oder 'false', erhalten: '${raw}'` };
+    return { ok: false, error: `Expected 'true' or 'false', got: '${raw}'` };
   }
   if (type === 'ident') {
-    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(raw)) return { ok: false, error: `Ungültiger Bezeichner: '${raw}'` };
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(raw)) return { ok: false, error: `Invalid identifier: '${raw}'` };
     return { ok: true, value: raw };
   }
   // 'string' — becomes a BACKTICK_STRING on serialization (see serializeSettings); the grammar
   // forbids a literal backtick inside one.
-  if (String(raw).includes('`')) return { ok: false, error: `Wert darf keinen Backtick enthalten: '${raw}'` };
+  if (String(raw).includes('`')) return { ok: false, error: `Value must not contain a backtick: '${raw}'` };
   return { ok: true, value: raw };
 }
 
@@ -56,7 +56,7 @@ export function setSetting(text, { key, value }) {
     const sub = key.slice('pdfOptions.'.length);
     const type = PDF_OPTION_TYPES[sub];
     if (!type) {
-      return { ok: false, error: `Unbekannter pdfOptions-Schlüssel: '${sub}' (erwartet: ${Object.keys(PDF_OPTION_TYPES).join('|')})` };
+      return { ok: false, error: `Unknown pdfOptions key: '${sub}' (expected: ${Object.keys(PDF_OPTION_TYPES).join('|')})` };
     }
     const coerced = coerce(type, value);
     if (!coerced.ok) return coerced;
@@ -69,7 +69,7 @@ export function setSetting(text, { key, value }) {
   if (!type) {
     return {
       ok: false,
-      error: `Unbekannter settings-Schlüssel: '${key}' (erwartet: ${Object.keys(TOP_LEVEL_TYPES).join('|')} oder pdfOptions.<${Object.keys(PDF_OPTION_TYPES).join('|')}>)`,
+      error: `Unknown settings key: '${key}' (expected: ${Object.keys(TOP_LEVEL_TYPES).join('|')} or pdfOptions.<${Object.keys(PDF_OPTION_TYPES).join('|')}>)`,
     };
   }
   const coerced = coerce(type, value);
@@ -81,14 +81,14 @@ export function setSetting(text, { key, value }) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
-  if (!args.file) { report({ ok: false, error: '--file ist Pflicht.' }, { json }); return; }
-  if (!args.mode) { report({ ok: false, error: '--mode ist Pflicht (read|set).' }, { json }); return; }
+  if (!args.file) { report({ ok: false, error: '--file is required.' }, { json }); return; }
+  if (!args.mode) { report({ ok: false, error: '--mode is required (read|set).' }, { json }); return; }
 
   let text;
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json });
     return;
   }
 
@@ -98,15 +98,15 @@ function main() {
   }
 
   if (args.mode === 'set') {
-    if (!args.key) { report({ ok: false, error: '--key ist Pflicht.' }, { json }); return; }
-    if (args.value === undefined) { report({ ok: false, error: '--value ist Pflicht.' }, { json }); return; }
+    if (!args.key) { report({ ok: false, error: '--key is required.' }, { json }); return; }
+    if (args.value === undefined) { report({ ok: false, error: '--value is required.' }, { json }); return; }
     const result = setSetting(text, { key: args.key, value: args.value });
     if (result.ok) writeFileSync(args.file, result.text);
-    report(result.ok ? { ok: true } : result, { json, plainText: () => 'gesetzt.' });
+    report(result.ok ? { ok: true } : result, { json, plainText: () => 'set.' });
     return;
   }
 
-  report({ ok: false, error: `Unbekannter --mode: ${args.mode} (erwartet read|set)` }, { json });
+  report({ ok: false, error: `Unknown --mode: ${args.mode} (expected read|set)` }, { json });
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) main();

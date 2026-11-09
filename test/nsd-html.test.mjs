@@ -15,7 +15,7 @@ test('escapeText escapes markup characters and non-ASCII as numeric entities', (
 });
 
 test('escapeText refuses a backtick', () => {
-  assert.throws(() => escapeText('a`b'), /Backtick/);
+  assert.throws(() => escapeText('a`b'), /backtick/);
 });
 
 test('headingHtml/paragraphHtml produce escaped template-style markup', () => {

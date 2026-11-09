@@ -26,7 +26,7 @@ export function inventory(dir) {
   const folder = resolve(dir);
   let names;
   try { names = readdirSync(folder); } catch (e) {
-    return { ok: false, error: `Ordner nicht lesbar: ${folder} (${e.message})` };
+    return { ok: false, error: `Folder not readable: ${folder} (${e.message})` };
   }
   const files = names
     .filter((n) => n.toLowerCase().endsWith('.docx') && !n.startsWith('~$'))
@@ -49,10 +49,10 @@ export function inventory(dir) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
-  if (!args.dir) { report({ ok: false, error: '--dir ist Pflicht.' }, { json }); return; }
+  if (!args.dir) { report({ ok: false, error: '--dir is required.' }, { json }); return; }
   report(inventory(args.dir), {
     json,
-    plainText: (r) => r.files.map((f) => `${f.target.padEnd(12)} ${f.docx}${f.stats ? ` (${f.stats.paragraphs} Abs., ${f.stats.tables} Tab., ${f.stats.images} Bilder)` : ' (FEHLER)'}`).join('\n'),
+    plainText: (r) => r.files.map((f) => `${f.target.padEnd(12)} ${f.docx}${f.stats ? ` (${f.stats.paragraphs} paragraphs, ${f.stats.tables} tables, ${f.stats.images} images)` : ' (ERROR)'}`).join('\n'),
   });
 }
 

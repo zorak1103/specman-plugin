@@ -1,7 +1,7 @@
 ---
 name: sync-refs
-description: "Scans Java Javadoc and TypeScript/Angular JSDoc comments for SUC-XXX Schritt N (ID: xxx) references and corrects the step number wherever it has drifted from the step's current number in the actual .nsd file, resolved via the stable ID. Use whenever spec step numbers may have shifted (after editing a spec, or as a standalone check) and code comments need to stay accurate. Not for editing the spec itself."
-argument-hint: "[<datei-oder-ordner>] [--spec-dir <ordner>]"
+description: "Scans Java Javadoc and TypeScript/Angular JSDoc comments for SUC-XXX Step N (ID: xxx) references (the legacy German keyword Schritt is also recognised) and corrects the step number wherever it has drifted from the step's current number in the actual .nsd file, resolved via the stable ID. Use whenever spec step numbers may have shifted (after editing a spec, or as a standalone check) and code comments need to stay accurate. Not for editing the spec itself."
+argument-hint: "[<file-or-folder>] [--spec-dir <folder>]"
 allowed-tools:
   - Read
   - Grep
@@ -11,27 +11,28 @@ allowed-tools:
 
 # sync-refs
 
-## Schritt 1 — Ziel und Spec-Ordner bestimmen
+## Step 1 — Determine target and spec folder
 
-Ohne Argument: den aktuellen Diff bzw. die zuletzt bearbeiteten Dateien des Projekts annehmen
-(`Grep` nach `SUC-\d+.*Schritt.*\(ID:` über das Projekt, falls nichts anderes genannt wurde). Der
-Spec-Ordner kommt aus `--spec-dir`, oder aus `.claude/specman.local.md` (`specDir`), oder wird
-einmal erfragt.
+Without an argument: assume the current diff or the project's most recently edited files
+(`Grep` for `SUC-\d+.*(Step|Schritt).*\(ID:` across the project, if nothing else was named). The
+spec folder comes from `--spec-dir`, or from `.claude/specman.local.md` (`specDir`), or is asked
+for once.
 
-## Schritt 2 — Pro Datei aktualisieren
+## Step 2 — Update per file
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/sync-refs.mjs" --file <datei> --spec-dir <ordner> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sync-refs.mjs" --file <file> --spec-dir <folder> --json
 ```
 
-Für jede betroffene Datei einzeln aufrufen (Java- wie TypeScript/Angular-Dateien gleichermaßen —
-das Skript erkennt beide Kommentarstile über dasselbe Muster).
+Call it individually for each affected file (Java and TypeScript/Angular files alike — the script
+recognises both comment styles via the same pattern). It recognises both `Step` and the legacy
+German `Schritt` as the keyword; it rewrites only the number and keeps whichever keyword the
+comment already uses.
 
-## Schritt 3 — Ergebnis berichten
+## Step 3 — Report the result
 
-- `changedCount`: Anzahl korrigierter Referenzen — kurz auflisten, welche Datei/Referenz betroffen
-  war.
-- `unresolved`: Referenzen, die nicht aufgelöst werden konnten (Spec-Datei nicht gefunden, oder
-  die ID existiert nicht mehr im Spec). Beides dem Nutzer melden, nicht stillschweigend
-  ignorieren — eine nicht mehr existierende ID deutet auf einen gelöschten Schritt hin, den der
-  Code-Kommentar noch referenziert.
+- `changedCount`: number of corrected references — briefly list which file/reference was
+  affected.
+- `unresolved`: references that could not be resolved (spec file not found, or the ID no longer
+  exists in the spec). Report both to the user, do not ignore them silently — an ID that no
+  longer exists points to a deleted step that the code comment still references.

@@ -31,11 +31,11 @@ export function locate(text, stepSelector) {
   }
 
   if ((stepSelector === 'intro' || stepSelector === 'outro') && !ast[stepSelector]) {
-    return { ok: false, error: `Die Spezifikation hat keinen ${stepSelector}-Block.` };
+    return { ok: false, error: `The specification has no ${stepSelector} block.` };
   }
   const found = resolveTarget(ast, stepSelector);
   if (found === null) {
-    return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+    return { ok: false, error: `Step not found: ${stepSelector}` };
   }
   const areas = addressableAreas(found.step);
   const sections = areas
@@ -53,14 +53,14 @@ export function locate(text, stepSelector) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
-    report({ ok: false, error: '--file ist Pflicht.' }, { json: !!args.json });
+    report({ ok: false, error: '--file is required.' }, { json: !!args.json });
     return;
   }
   let text;
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json: !!args.json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json: !!args.json });
     return;
   }
   const result = locate(text, args.step ?? args.block);

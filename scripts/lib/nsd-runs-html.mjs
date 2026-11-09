@@ -83,6 +83,6 @@ export function paragraphsToHtml(paragraphs) {
 
 export function assertNoBacktick(html, where) {
   if (String(html).includes('`')) {
-    throw new Error(`${where}: HTML darf keinen Backtick enthalten (als &#96; schreiben).`);
+    throw new Error(`${where}: HTML must not contain a backtick (write it as &#96;).`);
   }
 }

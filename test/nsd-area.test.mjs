@@ -192,7 +192,7 @@ test('insert rejects HTML containing a backtick', () => {
     stepSelector: '1', op: 'insert', kind: 'text', position: 'end', html: 'a `quote`',
   });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Backtick/);
+  assert.match(result.error, /backtick/i);
 });
 
 test('insert rejects an unknown kind', () => {
@@ -203,7 +203,7 @@ test('insert rejects an unknown kind', () => {
 test('insert reports a clear error for an unknown step', () => {
   const result = applyArea(emptyTailSrc, { stepSelector: '99', op: 'insert', kind: 'text', position: 'end', html: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });
 
 test('insert rejects an out-of-range after: position', () => {

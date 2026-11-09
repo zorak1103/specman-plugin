@@ -24,7 +24,7 @@ import { setTitle, setSection } from './lib/nsd-html.mjs';
 
 function newHtmlFor(area, { title, section, sectionText, newHtml }, block) {
   if (title !== undefined) {
-    if (block !== 'intro') throw new Error('nsd-set-text: --title gilt nur für den intro-Block.');
+    if (block !== 'intro') throw new Error('nsd-set-text: --title only applies to the intro block.');
     return setTitle(area.html, title);
   }
   if (section !== undefined) return setSection(area.html, section, sectionText ?? '');
@@ -47,7 +47,7 @@ export function applySetText(text, opts) {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-  if (!found) return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+  if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
 
   try {
     const area = resolveArea(found.step, opts.title !== undefined ? 'head' : areaKey);
@@ -69,15 +69,15 @@ function main() {
   const step = args.step ?? args.block;
   const mode = args.title !== undefined ? 'title' : args.section !== undefined ? 'section' : 'html';
   const required = { title: ['file'], section: ['file', 'area', 'text'], html: ['file', 'area', 'html'] }[mode];
-  if (step === undefined) { report({ ok: false, error: '--step (oder --block) ist Pflicht.' }, { json }); return; }
+  if (step === undefined) { report({ ok: false, error: '--step (or --block) is required.' }, { json }); return; }
   for (const key of required) {
-    if (args[key] === undefined) { report({ ok: false, error: `--${key} ist Pflicht.` }, { json }); return; }
+    if (args[key] === undefined) { report({ ok: false, error: `--${key} is required.` }, { json }); return; }
   }
   let text;
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json });
     return;
   }
   const result = applySetText(text, {

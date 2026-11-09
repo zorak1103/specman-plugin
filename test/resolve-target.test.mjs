@@ -36,5 +36,5 @@ test('resolveTarget prefers the .wrk when it exists (Specman autoload in progres
 test('resolveTarget fails clearly when the .nsd itself does not exist', () => {
   const result = resolveTarget('C:/nonexistent/SUC-999.nsd');
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });

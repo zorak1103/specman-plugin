@@ -19,16 +19,16 @@ export function applyMarkChange(text, { stepSelector, kind, changeset }) {
     return {
       ok: false,
       error:
-        `nsd-mark-change unterstützt kein '${kind}' — Specman validiert die sourceStep=-Verknüpfung ` +
-        'nirgends und crasht bei einem fehlerhaften Verweis beim Laden. Schritt-Verschiebung mit ' +
-        'Tracking bleibt eine manuelle Specman-UI-Aktion (siehe VENDORING.md).',
+        `nsd-mark-change does not support '${kind}' — Specman does not validate the sourceStep= link ` +
+        'anywhere and crashes on load when the reference is broken. Moving a step with ' +
+        'tracking remains a manual Specman UI action (see VENDORING.md).',
     };
   }
   if (kind !== 'clear' && kind !== 'added' && kind !== 'removed') {
-    return { ok: false, error: `Ungültiger kind: '${kind}' (erwartet: added, removed, oder clear)` };
+    return { ok: false, error: `Invalid kind: '${kind}' (expected: added, removed, or clear)` };
   }
   if (kind !== 'clear' && !changeset) {
-    return { ok: false, error: '--changeset ist Pflicht außer bei --kind clear.' };
+    return { ok: false, error: '--changeset is required except with --kind clear.' };
   }
 
   let ast;
@@ -40,7 +40,7 @@ export function applyMarkChange(text, { stepSelector, kind, changeset }) {
 
   const selector = /^[0-9a-f]{8}$/.test(stepSelector) ? { stepId: stepSelector } : { stepNum: stepSelector };
   const found = findStep(ast, selector);
-  if (!found) return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+  if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
 
   found.step.change = kind === 'clear' ? undefined : { kind, changeset, sourceStep: undefined };
 
@@ -51,7 +51,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   for (const required of ['file', 'step', 'kind']) {
     if (args[required] === undefined) {
-      report({ ok: false, error: `--${required} ist Pflicht.` }, { json: !!args.json });
+      report({ ok: false, error: `--${required} is required.` }, { json: !!args.json });
       return;
     }
   }
@@ -59,7 +59,7 @@ function main() {
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json: !!args.json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json: !!args.json });
     return;
   }
   const result = applyMarkChange(text, { stepSelector: args.step, kind: args.kind, changeset: args.changeset });

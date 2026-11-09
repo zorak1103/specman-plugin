@@ -125,10 +125,10 @@ export function verify({ extract, nsdText, plan }) {
   }
 
   const problems = [];
-  if (missing.length > 0) problems.push(`${missing.length} Absatz/Absätze des docx fehlen im .nsd.`);
+  if (missing.length > 0) problems.push(`${missing.length} paragraph(s) of the docx are missing from the .nsd.`);
   const expectedImages = extract.images.length;
   if (counts.images !== expectedImages) {
-    problems.push(`Bilder: docx ${expectedImages}, .nsd ${counts.images}.`);
+    problems.push(`Images: docx ${expectedImages}, .nsd ${counts.images}.`);
   }
   if (plan) {
     const visit = (nodes, acc) => {
@@ -143,7 +143,7 @@ export function verify({ extract, nsdText, plan }) {
     const planned = visit(plan.main?.steps, { leaves: 0, structured: 0 });
     (plan.main?.catches ?? []).forEach((c) => visit(c.body, planned));
     if (planned.leaves !== counts.leaves || planned.structured !== counts.structured) {
-      problems.push(`Schritte: Plan ${planned.leaves}/${planned.structured} (Blatt/Struktur), .nsd ${counts.leaves}/${counts.structured}.`);
+      problems.push(`Steps: plan ${planned.leaves}/${planned.structured} (leaf/structured), .nsd ${counts.leaves}/${counts.structured}.`);
     }
   }
 
@@ -163,7 +163,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
   for (const required of ['extract', 'nsd']) {
-    if (args[required] === undefined) { report({ ok: false, error: `--${required} ist Pflicht.` }, { json }); return; }
+    if (args[required] === undefined) { report({ ok: false, error: `--${required} is required.` }, { json }); return; }
   }
   let extract, nsdText, plan;
   try {
@@ -171,14 +171,14 @@ function main() {
     nsdText = readFileSync(args.nsd, 'utf8');
     if (args.plan) plan = JSON.parse(readFileSync(args.plan, 'utf8'));
   } catch (e) {
-    report({ ok: false, error: `Eingabe nicht lesbar: ${e.message}` }, { json });
+    report({ ok: false, error: `Input not readable: ${e.message}` }, { json });
     return;
   }
   const result = verify({ extract, nsdText, plan });
   const lines = (result.missing ?? []).map((m) => `  ${m.id}: ${m.text}`);
   report(result, {
     json,
-    plainText: (r) => `OK — ${r.checkedParagraphs} Absätze geprüft, ${r.images.nsd} Bild(er), ${r.steps.leaves + r.steps.structured} Schritte.`,
+    plainText: (r) => `OK — ${r.checkedParagraphs} paragraphs checked, ${r.images.nsd} image(s), ${r.steps.leaves + r.steps.structured} steps.`,
   });
   if (!json && !result.ok && lines.length > 0) console.error(lines.join('\n'));
 }

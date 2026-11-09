@@ -13,7 +13,7 @@ import { isMainModule, report, parseArgs } from './lib/cli.mjs';
 const FILENAME_RE = /^SUC-(\d+(?:\.\d+)*)\b/;
 
 export function proposeSucNumber(dir, { parent, base }) {
-  if (!existsSync(dir)) return { ok: false, error: `Ordner nicht gefunden: ${dir}` };
+  if (!existsSync(dir)) return { ok: false, error: `Folder not found: ${dir}` };
 
   const existingNumbers = readdirSync(dir)
     .map((name) => name.match(FILENAME_RE))
@@ -48,7 +48,7 @@ export function proposeSucNumber(dir, { parent, base }) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.dir) {
-    report({ ok: false, error: '--dir ist Pflicht.' }, { json: !!args.json });
+    report({ ok: false, error: '--dir is required.' }, { json: !!args.json });
     return;
   }
   const result = proposeSucNumber(args.dir, { parent: args.parent, base: args.base ? Number(args.base) : undefined });

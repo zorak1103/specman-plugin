@@ -10,7 +10,7 @@ const FOLLOWING_DIVS_RE = /^(\s*<div\b[^>]*>[\s\S]*?<\/div>)+/;
 /** Plain text in, Specman-style HTML text out: &, <, > escaped, non-ASCII as numeric entities. */
 export function escapeText(text) {
   const s = String(text);
-  if (s.includes('`')) throw new Error(`nsd-html: Text darf keinen Backtick enthalten: '${s}'`);
+  if (s.includes('`')) throw new Error(`nsd-html: text must not contain a backtick: '${s}'`);
   const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return Array.from(escaped).map((ch) => (ch.codePointAt(0) > 127 ? `&#${ch.codePointAt(0)};` : ch)).join('');
 }
@@ -42,7 +42,7 @@ export function sectionHtml(heading, text) {
 /** Replaces only the content of the first `<h1>` (the title of an intro head). */
 export function setTitle(headHtml, text) {
   const m = headHtml.match(/(<h1\b[^>]*>)[\s\S]*?(<\/h1>)/);
-  if (!m) throw new Error('nsd-html: der head enthält keine h1-Überschrift (Titel).');
+  if (!m) throw new Error('nsd-html: the head contains no h1 heading (title).');
   return headHtml.replace(m[0], `${m[1]}\n      ${SPAN_OPEN}${escapeText(text)}${SPAN_CLOSE}\n    ${m[2]}`);
 }
 
@@ -65,7 +65,7 @@ export function setSection(html, heading, text) {
   const all = headings(html);
   const target = all.find((h) => h.text === heading);
   if (!target) {
-    throw new Error(`nsd-html: Überschrift '${heading}' nicht gefunden (vorhanden: ${all.map((h) => `'${h.text}'`).join(', ') || 'keine'}).`);
+    throw new Error(`nsd-html: heading '${heading}' not found (available: ${all.map((h) => `'${h.text}'`).join(', ') || 'none'}).`);
   }
   const rest = html.slice(target.end);
   const old = rest.match(FOLLOWING_DIVS_RE);

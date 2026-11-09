@@ -62,7 +62,7 @@ test('add refuses a non-break step, an unknown step, a duplicate catch and a bad
   const once = applyCatch(src, { op: 'add', breakId: '6131450e', head: 'x' });
   const twice = applyCatch(once.text, { op: 'add', breakId: '6131450e', head: 'y' });
   assert.equal(twice.ok, false);
-  assert.match(twice.error, /bereits/);
+  assert.match(twice.error, /already exists/);
   assert.equal(applyCatch(src, { op: 'add', breakId: '6131450e', head: 'x', parentKey: 'step:e81623e9.body' }).ok, false);
 });
 

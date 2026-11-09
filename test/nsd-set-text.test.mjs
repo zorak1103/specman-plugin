@@ -32,7 +32,7 @@ test('applySetText produces text the AST can re-parse cleanly (serializer round 
 test('applySetText reports a clear error for an unknown step', () => {
   const result = applySetText(src, { stepSelector: '99', areaKey: 'head', newHtml: 'x' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });
 
 test('applySetText reports a clear error for an unknown area key', () => {
@@ -43,7 +43,7 @@ test('applySetText reports a clear error for an unknown area key', () => {
 test('applySetText rejects new HTML containing a backtick', () => {
   const result = applySetText(src, { stepSelector: '1', areaKey: 'head', newHtml: 'a `quote`' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Backtick/);
+  assert.match(result.error, /backtick/i);
 });
 
 // ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ import { isMainModule, report, parseArgs } from './lib/cli.mjs';
 
 export function resolveTarget(nsdPath) {
   if (!existsSync(nsdPath)) {
-    return { ok: false, error: `Datei nicht gefunden: ${nsdPath}` };
+    return { ok: false, error: `File not found: ${nsdPath}` };
   }
   const wrkPath = `${nsdPath}.wrk`;
   if (existsSync(wrkPath)) {
@@ -28,13 +28,13 @@ export function resolveTarget(nsdPath) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
-    report({ ok: false, error: '--file ist Pflicht.' }, { json: !!args.json });
+    report({ ok: false, error: '--file is required.' }, { json: !!args.json });
     return;
   }
   const result = resolveTarget(args.file);
   report(result, {
     json: !!args.json,
-    plainText: (r) => `${r.path}${r.usingWorkingCopy ? ' (Arbeitskopie, Datei ist in Specman geöffnet)' : ''}`,
+    plainText: (r) => `${r.path}${r.usingWorkingCopy ? ' (working copy, file is open in Specman)' : ''}`,
   });
 }
 

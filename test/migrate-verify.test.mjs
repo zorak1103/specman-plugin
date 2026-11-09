@@ -45,7 +45,7 @@ test('verify detects a changed number of steps against the plan', () => {
   const shorter = { ...plan, main: { steps: [plan.main.steps[0]] } };
   const result = verify({ extract, nsdText: built.text, plan: shorter });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Schritte: Plan 1\/0/);
+  assert.match(result.error, /Steps: plan 1\/0/);
 });
 
 test('verify detects a differing image count', () => {
@@ -53,7 +53,7 @@ test('verify detects a differing image count', () => {
   const withImage = { ...extract, images: [{ id: 'i1' }] };
   const result = verify({ extract: withImage, nsdText: built.text });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Bilder: docx 1, \.nsd 0/);
+  assert.match(result.error, /Images: docx 1, \.nsd 0/);
 });
 
 test('verify tolerates reflowed text (paragraphs merged into one step)', () => {

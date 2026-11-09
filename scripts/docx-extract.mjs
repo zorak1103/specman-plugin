@@ -18,7 +18,7 @@ import { extractDocx, renderOutline } from './lib/docx-reader.mjs';
 export function extractToDir(docxPath, outDir) {
   let buffer;
   try { buffer = readFileSync(docxPath); } catch (e) {
-    return { ok: false, error: `Datei nicht lesbar: ${docxPath} (${e.message})` };
+    return { ok: false, error: `File not readable: ${docxPath} (${e.message})` };
   }
   const absoluteOut = resolve(outDir);
   mkdirSync(absoluteOut, { recursive: true });
@@ -33,7 +33,7 @@ export function extractToDir(docxPath, outDir) {
       },
     });
   } catch (e) {
-    return { ok: false, error: `docx nicht lesbar: ${e.message}` };
+    return { ok: false, error: `docx not readable: ${e.message}` };
   }
 
   const extractPath = join(absoluteOut, 'extract.json');
@@ -56,12 +56,12 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
   for (const required of ['file', 'out-dir']) {
-    if (args[required] === undefined) { report({ ok: false, error: `--${required} ist Pflicht.` }, { json }); return; }
+    if (args[required] === undefined) { report({ ok: false, error: `--${required} is required.` }, { json }); return; }
   }
   const result = extractToDir(args.file, args['out-dir']);
   report(result, {
     json,
-    plainText: (r) => `extrahiert: ${r.stats.paragraphs} Absätze, ${r.stats.tables} Tabellen, ${r.stats.images} Bilder → ${r.outlinePath}`,
+    plainText: (r) => `extracted: ${r.stats.paragraphs} paragraphs, ${r.stats.tables} tables, ${r.stats.images} images → ${r.outlinePath}`,
   });
 }
 

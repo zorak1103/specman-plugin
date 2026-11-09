@@ -1,7 +1,7 @@
 ---
 name: migrate
 description: "Migrates an existing Word (.docx) SUC specification to a Specman .nsd file next to it -- branches, loops and exceptions become structured steps, images become wireframes, the document history is carried over -- without losing any logic. Use only when an existing .docx specification should become a .nsd. Not for creating a new specification (use plan), editing an existing .nsd (use edit) or implementing code from one (use implement)."
-argument-hint: "--file <docx> | --all [--dir <spec-ordner>]"
+argument-hint: "--file <docx> | --all [--dir <spec-folder>]"
 allowed-tools:
   - Read
   - Write
@@ -11,301 +11,302 @@ allowed-tools:
 
 # migrate
 
-Migriert eine Word-Spezifikation (`.docx`) nach Specman (`.nsd`). Die `.nsd` entsteht **neben der
-docx** unter dem gleichen Namen (`SUC-220 Titel.docx` → `SUC-220 Titel.nsd`); die docx wird nie
-verändert.
+Migrates a Word specification (`.docx`) to Specman (`.nsd`). The `.nsd` is created **next to the
+docx** under the same name (`SUC-220 Titel.docx` → `SUC-220 Titel.nsd`); the docx is never
+modified.
 
-## Keine Logik darf verloren gehen
+The Word documents being migrated follow the German SUC template and are in German. Quoted German
+phrases below (headings, trigger words, example sentences) are the patterns to look for in those
+documents; an English gloss follows on first mention.
 
-Das ist die oberste Regel dieses Skills — wichtiger als eine schöne Struktur:
+## No logic may be lost
 
-* **Nichts weglassen, nichts umformulieren, nichts zusammenfassen.** Jede Bedingung, Regel,
-  Feldbeschreibung, Fehlerbehandlung, Zahl, Tabelle und Designanmerkung der docx steht danach in
-  der `.nsd`. Text kommt per `ref` aus dem Extrakt, nicht aus dem Gedächtnis. **Einzige Ausnahme:**
-  Verzweigungen werden zu Frage + Aktion im Zweig umformuliert (Schritt 4b) — nur mit vorheriger
-  Freigabe des Nutzers und nur über das Plan-Feld `reworded`, nie über `ignored`.
-* **Nichts erfinden.** Eigener Text ist nur für Überschriften erlaubt, die es im docx nicht gibt
-  (z. B. Zweigbezeichnungen `Ja`/`Nein`) und für die freigegebenen Umformulierungen aus Schritt 4b.
-  Fachlich Neues, Geglättetes oder „Aufgeräumtes“ kommt nicht hinein.
-* **Struktur darf Logik nicht verändern.** Reihenfolge, Bedingungen und Zuordnung (wer macht was,
-  was passiert wann/sonst) bleiben exakt. Ist eine Verzweigung nicht eindeutig erkennbar,
-  bleibt der Text als einfacher Schritt stehen — lieber flach und vollständig als strukturiert und
-  falsch.
-* **Technisch abgesichert:** `nsd-build-from-plan.mjs` bricht ab, solange ein Absatz oder Bild
-  des docx weder verwendet noch mit Begründung in `ignored` aufgeführt ist; `migrate-verify.mjs`
-  prüft nach dem Bauen, dass jeder Absatz im Ergebnis vorkommt oder als `reworded` freigegeben ist.
-  **Diese Prüfungen nie umgehen** (kein Fachinhalt in `ignored`, kein Weglassen von Warnungen).
-* **Nichts still verschwinden lassen:** Alles, was das Zielmodell nicht abbilden kann
-  (verbundene Tabellenzellen, verschachtelte Listen, Fußnoten, Textfelder, Nicht-PNG-Bilder),
-  steht im Bericht (Schritt 9) und wird dem Nutzer genannt.
+This is the top rule of this skill — more important than a tidy structure:
 
-Daneben gilt wie im ganzen Plugin: **nie `.nsd`-Syntax von Hand schreiben** — jede Mutation läuft
-über die Skripte unter `${CLAUDE_PLUGIN_ROOT}/scripts/`. Fehlt eine Fähigkeit: stoppen und dem
-Nutzer sagen, nicht improvisieren.
+* **Omit nothing, reword nothing, summarize nothing.** Every condition, rule, field description,
+  error handling, number, table and design note of the docx is in the `.nsd` afterwards. Text comes
+  from the extract via `ref`, not from memory. **Only exception:** branches are reworded into
+  question + action in the branch (Step 4b) — only with the user's prior approval and only via the
+  plan field `reworded`, never via `ignored`.
+* **Invent nothing.** Own text is only allowed for headings that do not exist in the docx (e.g.
+  branch labels `Ja`/`Nein`, the German "Yes"/"No") and for the approved rewordings from Step 4b.
+  Anything new in substance, smoothed or "tidied up" does not go in.
+* **Structure must not change logic.** Order, conditions and assignment (who does what, what
+  happens when/otherwise) stay exactly as they are. If a branch is not clearly recognizable, the
+  text stays as a simple step — better flat and complete than structured and wrong.
+* **Technically enforced:** `nsd-build-from-plan.mjs` aborts as long as a paragraph or image of the
+  docx is neither used nor listed in `ignored` with a reason; `migrate-verify.mjs` checks after the
+  build that every paragraph appears in the result or is approved as `reworded`.
+  **Never bypass these checks** (no domain content in `ignored`, no dropping of warnings).
+* **Let nothing disappear silently:** Everything the target model cannot represent (merged table
+  cells, nested lists, footnotes, text boxes, non-PNG images) goes into the report (Step 9) and is
+  communicated to the user.
 
-Festgelegte Entscheidungen: Tracked Changes → **Endstand** (Einfügungen bleiben, Löschungen
-entfallen); **Kommentare werden ignoriert**; Kontrollfluss wird **automatisch** als
-if/ifElse/case/while/`break`+Catch abgebildet; Bilder werden als **Wireframe-Bilder** übernommen;
-die Historie der docx wird übernommen und um eine Migrationszeile ergänzt.
+In addition, as everywhere in the plugin: **never write `.nsd` syntax by hand** — every mutation
+goes through the scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. If a capability is missing: stop
+and tell the user, do not improvise.
 
-## Schritt 0 — Voraussetzung prüfen: Sanitizer-Jar
+Fixed decisions: tracked changes → **final state** (insertions stay, deletions are dropped);
+**comments are ignored**; control flow is mapped **automatically** to
+if/ifElse/case/while/`break`+catch; images are carried over as **wireframe images**; the docx
+history is carried over and extended by one migration row.
 
-Bevor irgendetwas angefasst wird, prüfen, ob die Umgebungsvariable `SPECMAN_JAR` stimmt — der
-Sanitizer-Schritt am Ende scheitert sonst erst nach getaner Arbeit:
+## Step 0 — Prerequisite check: sanitizer jar
+
+Before touching anything, check that the environment variable `SPECMAN_JAR` is correct — otherwise
+the sanitizer step at the end only fails after the work is done:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json
 ```
 
-* `ok: false`: **Stopp.** `error` wörtlich an den Nutzer weitergeben (Variable fehlt, Pfad
-  existiert nicht, zeigt auf ein Verzeichnis oder keine gültige `.jar`) und bitten, `SPECMAN_JAR`
-  auf den vollen Pfad der `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) zu setzen und die
-  Claude-Code-Session neu zu starten. Nicht weiterarbeiten, nicht „später sanitizen".
-* `ok: true` mit nicht-leerem `warnings`: jede Warnung dem Nutzer zeigen (z. B. Jar älter als
-  Specman 1.4.0 oder Version nicht erkennbar) und per `AskUserQuestion` fragen, ob trotzdem
-  weitergemacht werden soll.
-* `ok: true` ohne Warnungen: still weiter zu Schritt 1.
+* `ok: false`: **Stop.** Pass `error` on to the user verbatim (variable missing, path does not
+  exist, points to a directory or to something that is not a valid `.jar`) and ask them to set
+  `SPECMAN_JAR` to the full path of `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) and to
+  restart the Claude Code session. Do not continue, do not "sanitize later".
+* `ok: true` with a non-empty `warnings`: show each warning to the user (e.g. jar older than
+  Specman 1.4.0 or version not detectable) and ask via `AskUserQuestion` whether to continue
+  anyway.
+* `ok: true` without warnings: continue silently to Step 1.
 
-## Schritt 1 — Ziel und Umfang
+## Step 1 — Target and scope
 
-* `--file <docx>`: genau diese Datei.
-* `--all` (optional `--dir`, sonst Ordner erfragen bzw. `specDir` aus `.claude/specman.local.md`):
+* `--file <docx>`: exactly this file.
+* `--all` (optionally `--dir`, otherwise ask for the folder or use `specDir` from
+  `.claude/specman.local.md`):
 
   ```
   node "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-inventory.mjs" --dir <ordner> --json
   ```
 
-  Übersicht zeigen (Dateien, Absätze/Tabellen/Bilder, Zielstatus) und per `AskUserQuestion`
-  klären, welche Dateien migriert werden. **Dateien nacheinander** abarbeiten (Schritte 2–10 je
-  Datei); bei großem Umfang anbieten, den Rest in einer neuen Sitzung fortzusetzen.
+  Show an overview (files, paragraphs/tables/images, target status) and use `AskUserQuestion` to
+  clarify which files to migrate. Process **files one after another** (Steps 2–10 per file); for a
+  large scope, offer to continue the rest in a new session.
 
-## Schritt 2 — Zieldatei prüfen
+## Step 2 — Check the target file
 
-Ziel = docx-Pfad mit `.nsd`. Zielstatus (`migrate-inventory.mjs`, bzw. für `--file`
-`resolve-target.mjs --file <ziel> --json`):
+Target = docx path with `.nsd`. Target status (`migrate-inventory.mjs`, or for `--file`
+`resolve-target.mjs --file <target> --json`):
 
-* `none`: weiter.
-* `v2` / `legacy`: es existiert bereits eine `.nsd` → `AskUserQuestion`, ob sie überschrieben werden
-  soll (bei `legacy` darauf hinweisen, dass es nicht das V2-Format ist). Bei „nein“ diese Datei
-  überspringen.
-* `working-copy` (`.wrk` vorhanden, Datei ist in Specman geöffnet): stoppen und den Nutzer bitten,
-  sie in Specman zu schließen.
+* `none`: continue.
+* `v2` / `legacy`: a `.nsd` already exists → `AskUserQuestion` whether to overwrite it (for
+  `legacy`, point out that it is not the V2 format). If "no", skip this file.
+* `working-copy` (`.wrk` exists, the file is open in Specman): stop and ask the user to close it in
+  Specman.
 
-Überschrieben wird später nur mit `--force`, und nur nach dieser Bestätigung.
+Overwriting happens later only with `--force`, and only after this confirmation.
 
-**Die `.wrk` kann auch nach dem ersten Build entstehen** (der Nutzer öffnet die Datei in Specman und
-will weitere Änderungen dort ansehen). Vor **jedem** späteren Neubau Schritt 2 erneut prüfen. Gibt
-es jetzt eine `.wrk`, gilt die `.wrk` als die Arbeitsfassung: Es gibt kein Skript, das Schritte
-verschiebt oder löscht, daher so vorgehen:
+**The `.wrk` can also appear after the first build** (the user opens the file in Specman and wants
+to look at further changes there). Before **every** later rebuild, check Step 2 again. If there is
+now a `.wrk`, the `.wrk` is the working version: there is no script that moves or deletes steps, so
+proceed as follows:
 
-1. Backup der `.wrk` (z. B. `<name>.wrk.bak`) anlegen.
-2. Die neu gebaute `.nsd` an einen Zwischenort bauen (nicht über die Zieldatei) und mit
-   `sanitize.mjs` prüfen.
-3. Die `.wrk` mit dem Ergebnis überschreiben und erneut sanitizen.
-4. Den Nutzer ausdrücklich bitten, die Datei in Specman **neu zu laden** (bzw. zu schließen und
-   wieder zu öffnen) — Änderungen, die er in Specman seit dem Backup gemacht hat, stehen nur im
-   Backup.
+1. Create a backup of the `.wrk` (e.g. `<name>.wrk.bak`).
+2. Build the newly built `.nsd` at an intermediate location (not over the target file) and check it
+   with `sanitize.mjs`.
+3. Overwrite the `.wrk` with the result and sanitize again.
+4. Explicitly ask the user to **reload** the file in Specman (or close and reopen it) — changes
+   they made in Specman since the backup exist only in the backup.
 
-Das nur nach Bestätigung durch den Nutzer; nie eine `.wrk` ohne Backup überschreiben.
+Only do this after confirmation by the user; never overwrite a `.wrk` without a backup.
 
-## Schritt 3 — Extrahieren
+## Step 3 — Extract
 
-Arbeitsordner: `C:/Users/<user>/.claude/tmp/scratch/migrate-<slug>/` (Konvention für flüchtige
-Zwischendateien aus dem globalen CLAUDE.md des Nutzers).
+Working folder: `C:/Users/<user>/.claude/tmp/scratch/migrate-<slug>/` (convention for transient
+intermediate files from the user's global CLAUDE.md).
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/docx-extract.mjs" --file <docx> --out-dir <arbeitsordner> --json
 ```
 
-Liefert `extract.json`, `outline.txt` und `i<N>.<ext>` je Bild. Die `warnings` der Antwort
-(Fußnoten, Textfelder, Nicht-PNG-Bilder, OLE-Objekte, …) merken — sie kommen in den Bericht.
-`stats.comments` wird ignoriert (Kommentare sind laut Vorgabe nicht Teil der Migration).
+Produces `extract.json`, `outline.txt` and `i<N>.<ext>` per image. Note the `warnings` of the
+response (footnotes, text boxes, non-PNG images, OLE objects, …) — they go into the report.
+`stats.comments` is ignored (comments are not part of the migration by design).
 
-## Schritt 4 — Outline lesen und Struktur ableiten
+## Step 4 — Read the outline and derive the structure
 
-`outline.txt` vollständig lesen (`Read`). Jede Zeile trägt die Id (`p12`, `t3`, `i2`), mit der der
-Plan arbeitet. Das docx folgt dem SUC-Aufbau: Dokumentenhistorie → Kopftabelle (Titel,
-Beschreibung, Akteur(e), Auslöser/Vorbedingung, Resultat/Nachbedingung) → Ablauftabelle
-(`Nr. | Beteiligte | Text`, normaler Ablauf, dann Alternativer Ablauf/Ausnahmebehandlung) →
-Geschäftsregeln, nicht funktionale Anforderungen, Offene Punkte, Bemerkungen, Testfälle,
-Designanmerkungen → Abschnitte „Wireframes“/„Fachklassenmodell“ mit Bildern.
+Read `outline.txt` completely (`Read`). Each line carries the id (`p12`, `t3`, `i2`) the plan works
+with. The docx follows the SUC layout: document history (`Dokumentenhistorie`) → header table
+(title, description, actor(s), trigger/precondition, result/postcondition) → flow table
+(`Nr. | Beteiligte | Text`, i.e. No. | Participants | Text; normal flow, then alternative
+flow/exception handling) → business rules, non-functional requirements, open points, remarks, test
+cases, design notes → sections "Wireframes"/"Fachklassenmodell" (domain class model) with images.
 
-Zuordnung (Details und Schema: `${CLAUDE_PLUGIN_ROOT}/skills/migrate/plan-format.md` — **vor dem
-Schreiben des Plans lesen**):
+Mapping (details and schema: `${CLAUDE_PLUGIN_ROOT}/skills/migrate/plan-format.md` — **read it
+before writing the plan**):
 
 | docx | `.nsd` |
 |---|---|
-| Titel/Nummer | `number`/`title` |
-| Beschreibung, Akteure, Vorbedingungen, Nachbedingungen | `intro.*` |
-| Absatz im Style `Essential` (Hauptschritt-Überschrift) | `subsequence`, darunter die Schritte |
-| Ablaufzeile `USER`/`SYSTEM`/… | `simple` — nur der Satz, **ohne** Präfix `System:`/`User:` (siehe unten) |
-| „Ist …, so …“ / „Andernfalls“ / „Wenn … sonst …“ | `if` / `ifElse` — Kopf = Frage, Aktion im Zweig (Schritt 4b) |
-| „Je nach …“, Fallunterscheidung mit Aufzählung | `case` (Default + ≥ 2 Fälle) |
-| „Solange …“, „für jeden …“, „wiederhole …“ | `while` (bzw. `doWhile` bei „mindestens einmal“) |
-| „Exception …“ / Ausnahmebehandlung / Abbruch | `break` im Ablauf + `catches` mit dem Ausnahme-Ablauf |
-| Listen, Feld-/Bedingungstabellen im Schritt | `ref` auf die Absätze/Tabelle → Areas des Schritts |
-| Geschäftsregeln, nicht funktionale Anforderungen, Bemerkungen, Design-Anmerkungen | `outro.*` |
-| Offene Punkte (Tabelle) | `outro.openPoints` |
-| Bilder (inline im Schritt oder unter „Wireframes“/„Fachklassenmodell“) | Image-Area am Schritt bzw. `outro.sections` |
+| Title/number | `number`/`title` |
+| Description, actors, preconditions, postconditions | `intro.*` |
+| Paragraph in style `Essential` (main step heading) | `subsequence`, with the steps below it |
+| Flow row `USER`/`SYSTEM`/… | `simple` — just the sentence, **without** the `System:`/`User:` prefix (see below) |
+| "Ist …, so …" (if …, then …) / "Andernfalls" (otherwise) / "Wenn … sonst …" (if … else …) | `if` / `ifElse` — head = question, action in the branch (Step 4b) |
+| "Je nach …" (depending on …), case distinction with bullet list | `case` (default + ≥ 2 cases) |
+| "Solange …" (as long as …), "für jeden …" (for each …), "wiederhole …" (repeat …) | `while` (or `doWhile` for "at least once") |
+| "Exception …" / exception handling / abort | `break` in the flow + `catches` with the exception flow |
+| Lists, field/condition tables in the step | `ref` to the paragraphs/table → areas of the step |
+| Business rules, non-functional requirements, remarks, design notes | `outro.*` |
+| Open points (table, `Offene Punkte`) | `outro.openPoints` |
+| Images (inline in the step or under "Wireframes"/"Fachklassenmodell") | image area on the step or `outro.sections` |
 
-Regeln dabei:
+Rules:
 
-* **Formulierungen ohne Präfix `System:` / `User:`.** Schritttexte beginnen nicht mit dem
-  Beteiligten (weder `System:`, `User:` noch fett oder in Großbuchstaben); der Satz steht für sich
-  („Das System zeigt …“, „Möchte der User …“). Die Beteiligten-Zelle der Ablauftabelle wird deshalb
-  **nicht** vor den Text gesetzt, sondern in `ignored` geführt (Begründung: „Beteiligter steht im
-  Satz“). Das Plan-Feld `label` wird nicht für Beteiligte verwendet — der Builder verweigert
-  `System`/`User` als `label`. Nennt ein Satz seinen Handelnden nicht (kein „System“/„User“ o. Ä. im
-  Satz), ist das kein Grund für ein Präfix: Satz unverändert lassen und die Stelle im Bericht
-  nennen, damit der Nutzer entscheidet.
-* **Verzweigungen sind Frage + Aktion.** Der Kopf von `if`/`ifElse` ist eine Frage („Liegen für die
-  Bilanz bereits Auswahlen vor?“); jeder Zweig (`Ja`/`Nein`) enthält die Aktion, die dann
-  ausgeführt wird. Steht Bedingung und Folge in einem Absatz, wird er **nicht** als Ganzes Kopf,
-  sondern in Frage und Zweigaktion zerlegt — das ist eine Umformulierung und läuft über Schritt 4b.
-* **Konservativ flach lassen**, was keine echte Verzweigung ist: „Möchte der User …“ (Auslöser
-  einer Aktion), Inline-„bzw.“ und „Wenn … dann“ in Hinweisen. Echte Verzweigungen sind etwa
-  „Sofern … / Andernfalls …“ oder „Liegen … vor? … sonst …“.
-* **Keine Stichpunkte bei Einzelschritten.** Ein Aufzählungspunkt der docx, der als eigener Schritt
-  (z. B. Zweig einer Verzweigung) migriert wird, ist normaler Schritttext, keine einelementige Liste
-  mit leerem Kopf: am `ref` `"flatLists": true` setzen. Der Build warnt bei einem Schritt mit leerem
-  Schritttext. Mehrere zusammengehörige Stichpunkte dürfen weiter eine Liste sein.
-* **Anmerkungen** („Anmerkung: …“) bleiben am Schritt hängen: per `areas` mit `kind: "text"` und
-  `ref`, wenn der Kopf des Schritts eigener Text ist.
-* **Verweise auf nummerierte Alternativen** („Für 1, 2 und 3 gilt …“, „Für 4 gilt …“) beziehen sich
-  auf eine Liste im Vorschritt. Solche Verweise werden zu einer Frage umformuliert (Schritt 4b)
-  und stehen im Bericht unter den Umformulierungen — nie unverändert als Zweigkopf übernehmen, wenn
-  der Bezug im Ergebnis nicht mehr eindeutig ist.
-* Eine Exception, auf die der Ablauf verweist, wird ein `break`-Schritt (`id` vergeben); der
-  Ausnahme-Ablauf des docx wandert in den zugehörigen `catches`-Eintrag des umschließenden
-  Containers.
-* Bilder: Position im docx entscheidet — Bild in/neben einem Ablaufschritt → Area dieses
-  Schritts, Bild unter einer Abschnittsüberschrift → `outro.sections` mit derselben Überschrift.
-  Skalierung nur angeben, wenn der Default (Breite relativ zum Diagramm) offensichtlich nicht passt.
-  Ist ein Bild kein PNG, den Nutzer um eine PNG-Konvertierung bitten (`pngFile`).
-* Zweifelsfälle (ist das wirklich eine Verzweigung? gehört das Bild hierher?) **gesammelt** per
-  `AskUserQuestion` klären, bevor der Plan geschrieben wird — oder konservativ flach lassen und
-  im Bericht nennen.
+* **Formulations without the `System:` / `User:` prefix.** Step texts do not start with the
+  participant (neither `System:`, `User:`, nor bold or in capital letters); the sentence stands on
+  its own ("The system shows …", "If the user wants …"). The participants cell of the flow table is
+  therefore **not** put in front of the text but listed in `ignored` (reason: "Participant is
+  stated in the sentence"). The plan field `label` is not used for participants — the builder
+  rejects `System`/`User` as `label`. If a sentence does not name its actor (no "System"/"User" or
+  similar in the sentence), that is no reason for a prefix: leave the sentence unchanged and name
+  the place in the report so the user can decide.
+* **Branches are question + action.** The head of `if`/`ifElse` is a question ("Are there already
+  selections for the balance sheet?"); each branch (`Ja`/`Nein`, i.e. Yes/No) contains the action
+  that is then performed. If condition and consequence are in one paragraph, it is **not** used as
+  a whole as the head but split into question and branch action — that is a rewording and goes
+  through Step 4b.
+* **Keep it flat conservatively** where there is no real branch: "Möchte der User …" (the user
+  wants to … — trigger of an action), inline "bzw." (or) and "Wenn … dann" (if … then) in notes.
+  Real branches are e.g. "Sofern … / Andernfalls …" (provided that … / otherwise …) or "Liegen … vor?
+  … sonst …" (are … present? … otherwise …).
+* **No bullet points for single steps.** A bullet point of the docx that is migrated as its own step
+  (e.g. a branch of a branching) is normal step text, not a single-item list with an empty head: set
+  `"flatLists": true` on the `ref`. The build warns about a step with empty step text. Several
+  related bullet points may remain a list.
+* **Notes** ("Anmerkung: …") stay attached to the step: via `areas` with `kind: "text"` and `ref`
+  if the head of the step is its own text.
+* **References to numbered alternatives** ("Für 1, 2 und 3 gilt …", "Für 4 gilt …" — i.e. "For 1, 2
+  and 3 the following applies …") refer to a list in the previous step. Such references are
+  reworded into a question (Step 4b) and appear in the report under the rewordings — never adopt
+  them unchanged as a branch head if the reference is no longer unambiguous in the result.
+* An exception that the flow refers to becomes a `break` step (assign an `id`); the exception flow
+  of the docx moves into the corresponding `catches` entry of the enclosing container.
+* Images: position in the docx decides — image in/next to a flow step → area of that step, image
+  under a section heading → `outro.sections` with the same heading. Only specify scaling if the
+  default (width relative to the diagram) obviously does not fit. If an image is not a PNG, ask the
+  user for a PNG conversion (`pngFile`).
+* Doubtful cases (is this really a branch? does the image belong here?) are clarified **in a
+  batch** via `AskUserQuestion` before the plan is written — or conservatively left flat and named
+  in the report.
 
-## Schritt 4b — Formulierungen prüfen und freigeben lassen
+## Step 4b — Review wordings and get them approved
 
-Bei **jeder** Migration (nicht nur bei Verzweigungen) die Formulierungen der Schritttexte
-durchsehen: unklare Sätze, fehlender Handelnder, Verzweigungen ohne Frage. Geändert wird nichts
-ungefragt.
+In **every** migration (not only for branches), go through the wordings of the step texts: unclear
+sentences, missing actor, branches without a question. Nothing is changed without asking.
 
-* Für jede Verzweigung, die zu Frage + Aktion umgebaut werden soll, **konkrete Formulierungen
-  vorschlagen**: Originalabsatz → Frage (Kopf) → Aktion je Zweig. Alle Vorschläge **gesammelt**
-  per `AskUserQuestion` vorlegen (Übernehmen / anders formulieren / flach lassen) — **bevor** der
-  Plan geschrieben wird.
-* Freigegebene Umformulierungen: Frage und Zweigaktion als eigener Text (`"Text"`) in den Plan, die
-  ersetzten Originalabsätze in **`reworded`** (`reason`: „Bewusst zu Frage/Aktion umformuliert
-  (Freigabe des Nutzers)“) — nicht in `ignored`.
-* **Dubletten prüfen, bevor der Plan entsteht:**
-  * Gleiche Bedingungen in aufeinanderfolgenden Schritten („Für 1, 2 und 3 gilt …“ / „Für 4 gilt …“
-    in zwei Schritten) sind **eine** Verzweigung, nicht zwei. Nie zweimal 1:1 übernehmen.
-  * Gleichartige Blöcke (z. B. Datenlisten) **Absatz für Absatz vergleichen**. Unterschiede (etwa
-    ein abweichender Branchencode) **gesammelt** per `AskUserQuestion` vorlegen. Zusammengelegt
-    werden nur wortgleiche Dubletten oder vom Nutzer freigegebene; die ersetzten Absätze stehen
-    dann in `reworded` (mit Verweis auf den behaltenen Absatz im `reason`), nie in `ignored`.
-* Nicht freigegeben: Absatz unverändert per `ref` übernehmen (flach, vollständig).
-* Sonstige Auffälligkeiten ohne Umformulierung gehören in den Bericht (Schritt 9), nicht in den Plan.
+* For each branch that is to be rebuilt into question + action, **propose concrete wordings**:
+  original paragraph → question (head) → action per branch. Present all proposals **in a batch**
+  via `AskUserQuestion` (accept / word differently / leave flat) — **before** the plan is written.
+* Approved rewordings: question and branch action go into the plan as own text (`"Text"`), the
+  replaced original paragraphs go into **`reworded`** (`reason`: "Deliberately reworded into
+  question/action (user approval)") — not into `ignored`.
+* **Check for duplicates before the plan is created:**
+  * Identical conditions in consecutive steps ("Für 1, 2 und 3 gilt …" / "Für 4 gilt …" in two
+    steps) are **one** branch, not two. Never adopt them twice 1:1.
+  * Compare similar blocks (e.g. data lists) **paragraph by paragraph**. Present differences (such
+    as a deviating industry code) **in a batch** via `AskUserQuestion`. Only verbatim duplicates or
+    ones approved by the user are merged; the replaced paragraphs then go into `reworded` (with a
+    reference to the retained paragraph in the `reason`), never into `ignored`.
+* Not approved: adopt the paragraph unchanged via `ref` (flat, complete).
+* Other oddities without a rewording belong in the report (Step 9), not in the plan.
 
-## Schritt 5 — Plan schreiben
+## Step 5 — Write the plan
 
-Plan als `plan.json` in den Arbeitsordner schreiben (`Write`). Inhalt nur per `ref`/Schlüsselwörter
-des Plan-Formats; **jede** Id aus `outline.txt` wird entweder verwendet oder mit Begründung
-(`reason`) in `ignored` geführt — und `ignored` ist nur für Beschriftungen, Leerzellen und
-Strukturelemente, die die Vorlage selbst mitbringt, nie für Fachinhalt. Vom Nutzer freigegebene
-Umformulierungen (Schritt 4b) stehen in `reworded`.
+Write the plan as `plan.json` into the working folder (`Write`). Content only via `ref`/keywords of
+the plan format; **every** id from `outline.txt` is either used or listed in `ignored` with a
+reason (`reason`) — and `ignored` is only for labels, empty cells and structural elements that the
+template itself brings along, never for domain content. Rewordings approved by the user (Step 4b)
+go into `reworded`.
 
-## Schritt 6 — Bauen
+## Step 6 — Build
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-build-from-plan.mjs" --plan <plan.json> --extract <extract.json> --out <ziel.nsd> [--force] --json
 ```
 
-* `unreferenced` im Fehler: diese Inhalte fehlen im Plan. **Plan korrigieren** (verwenden), nicht
-  wegbegründen — außer es ist tatsächlich reine Struktur. Steht eigener Text anstelle eines
-  Absatzes, gehört dieser nur dann in `reworded`, wenn der Nutzer in Schritt 4b zugestimmt hat.
-* Sonstige Fehler (leerer Body, `case` mit < 2 Fällen, unbekannte Id, …): Plan anpassen, erneut
-  bauen.
-* `warnings` (aufgelöste Zellverbünde, abgeflachte Listen, Schritte mit leerem Schritttext) und
-  `summary.defaultedBranchHeads` für den Bericht merken; fehlende Zweigbezeichnungen nachtragen,
-  wenn das docx welche hergibt.
-* **Jeder Neubau mit `--force` schreibt die Historie neu aus dem Extrakt.** Sobald Version, Autor und
-  Folgeaktion aus Schritt 8 feststehen, beim Bauen `--migration-version <v> --migration-author
-  "<Name>" --migration-followup <-|Review>` mitgeben (alle drei zusammen): die Migrationszeile wird
-  dann gleich mitgeschrieben und geht bei Neubauten nicht verloren.
+* `unreferenced` in the error: this content is missing from the plan. **Fix the plan** (use it), do
+  not argue it away — unless it really is pure structure. If own text stands in place of a
+  paragraph, that paragraph belongs in `reworded` only if the user agreed in Step 4b.
+* Other errors (empty body, `case` with < 2 cases, unknown id, …): adjust the plan, build again.
+* Note the `warnings` (resolved merged cells, flattened lists, steps with empty step text) and
+  `summary.defaultedBranchHeads` for the report; add missing branch labels if the docx provides
+  some.
+* **Every rebuild with `--force` rewrites the history from the extract.** As soon as version, author
+  and follow-up action from Step 8 are settled, pass `--migration-version <v> --migration-author
+  "<Name>" --migration-followup <-|Review>` when building (all three together): the migration row
+  is then written right away and is not lost on rebuilds.
 
-## Schritt 7 — Sanitizen und prüfen
+## Step 7 — Sanitize and verify
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <ziel.nsd> --json
 node "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-verify.mjs" --extract <extract.json> --nsd <ziel.nsd> --plan <plan.json> --json
 ```
 
-* `ERROR` vom Sanitizer: Ursache im Plan beheben, neu bauen (`--force`), erneut versuchen. Nie eine
-  fehlerhafte Datei stehen lassen. Ist `SPECMAN_JAR` nicht gesetzt, bricht der Sanitizer ab:
-  `node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json` bestätigt das (es liest nur die
-  Umgebungsvariable und sucht nicht selbst). Dann Nutzer fragen, ob nach dem JAR gesucht werden
-  soll, und den Pfad nennen lassen oder bestätigen (siehe README) — Sanitizing wird nicht
-  übersprungen.
-* `warnings` in der Sanitizer-Antwort (bei jedem Status): jede Warnung dem Nutzer zeigen (Jar zu
-  alt, Spezifikation von einem neueren Specman als die Jar).
-* `stepNumberChanges` in der Sanitizer-Antwort: Der Sanitizer hat Schrittnummern verschoben. Bei
-  einer frischen Migration harmlos. Wird eine bereits migrierte `.nsd` neu gebaut und verweisen
-  Code-Kommentare auf ihre Schrittnummern, danach `sync-refs` vorschlagen.
-* `migrate-verify` mit `ok:false`: `missing` (Absätze, die in der `.nsd` fehlen), abweichende
-  Bild- oder Schrittzahl. Plan korrigieren und von Schritt 6 an wiederholen. Höchstens drei
-  Durchläufe; danach den Stand und die offenen Lücken dem Nutzer vorlegen statt weiterzuraten.
-  `reworded` in der Antwort listet die freigegebenen Umformulierungen — sie kommen getrennt in den
-  Bericht.
-* Arbeitsverzeichnis und Shell-Zustand werden nach jedem Bash-Aufruf zurückgesetzt: **absolute
-  Pfade** verwenden.
+* `ERROR` from the sanitizer: fix the cause in the plan, rebuild (`--force`), try again. Never leave
+  a faulty file in place. If `SPECMAN_JAR` is not set, the sanitizer aborts:
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json` confirms that (it only reads the
+  environment variable and does not search itself). Then ask the user whether to search for the JAR,
+  and let them name or confirm the path (see README) — sanitizing is not skipped.
+* `warnings` in the sanitizer response (with any status): show each warning to the user (jar too
+  old, specification from a newer Specman than the jar).
+* `stepNumberChanges` in the sanitizer response: the sanitizer has shifted step numbers. Harmless
+  for a fresh migration. If an already migrated `.nsd` is rebuilt and code comments refer to its
+  step numbers, suggest `sync-refs` afterwards.
+* `migrate-verify` with `ok:false`: `missing` (paragraphs that are missing in the `.nsd`), deviating
+  image or step count. Fix the plan and repeat from Step 6. At most three passes; after that,
+  present the state and the open gaps to the user instead of guessing on. `reworded` in the
+  response lists the approved rewordings — they go into the report separately.
+* Working directory and shell state are reset after every Bash call: use **absolute paths**.
 
-## Schritt 8 — Migrationszeile in der Historie
+## Step 8 — Migration row in the history
 
-Die Historie der docx steht bereits 1:1 in der Datei. Zusätzlich **eine** Zeile für die Migration:
+The history of the docx is already in the file 1:1. Add **one** additional row for the migration:
 
-1. Autor: `node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --get author --json`. Leer →
-   Namen **im Freitext erfragen** (eine einzelne Option reicht für `AskUserQuestion` nicht),
-   abkürzen lassen (`--abbreviate-name`), bestätigen, mit `--set author` merken (wie im
-   `plan`-Skill). Nie ohne Rückfrage einen Namen annehmen.
+1. Author: `node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --get author --json`. Empty →
+   **ask for the name as free text** (a single option is not enough for `AskUserQuestion`), have it
+   abbreviated (`--abbreviate-name`), confirm, remember with `--set author` (as in the `plan`
+   skill). Never assume a name without asking.
 2. `node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-history.mjs" --file <ziel.nsd> --mode read --json` →
-   höchste als `<int>.<int>` parsbare Version bestimmen (`-`-Zeilen ignorieren).
-3. `AskUserQuestion` mit **Version** und **Folgeaktion** (`-` oder `Review`). Das Muster der
-   Versionszählung **aus den letzten Zeilen ableiten**, nicht blind `x.(y+1)` vorschlagen: zählt die
-   Historie in Hauptversionen (`5.1`, `6.1` → Vorschlag `7.1`) oder in Nebenversionen (`2.1`, `2.2`
-   → `2.3`)? Das abgeleitete Muster als erste Option, die Alternative als zweite; ohne parsbare
-   Vorversion offen fragen.
-4. Zeile schreiben und erneut sanitizen — **nur** wenn die Datei ohne `--migration-*`-Flags gebaut
-   wurde; sonst steht die Zeile schon da (Schritt 6), und es bleibt beim Sanitizen:
+   determine the highest version that parses as `<int>.<int>` (ignore `-` rows).
+3. `AskUserQuestion` with **version** and **follow-up action** (`-` or `Review`). **Derive the
+   version-counting pattern from the last rows**, do not blindly suggest `x.(y+1)`: does the history
+   count in major versions (`5.1`, `6.1` → suggest `7.1`) or in minor versions (`2.1`, `2.2` →
+   `2.3`)? Offer the derived pattern as the first option and the alternative as the second; without
+   a parsable previous version, ask openly.
+4. Write the row and sanitize again — **only** if the file was built without the `--migration-*`
+   flags; otherwise the row is already there (Step 6), and only sanitizing remains:
 
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-history.mjs" --file <ziel.nsd> --mode append --version <v> --activity "Migration von Word nach Specman" --author "<Name>" --followup <-|Review> --json
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <ziel.nsd> --json
    ```
 
-**Nie eine Review-Zeile schreiben** — ein Review ist ein manueller Vorgang.
+   (The history table columns are `Aktivität`/`Autor`/`Datum` — activity/author/date; the scripts
+   also accept the English headers Activity/Author/Date. The activity text is written verbatim and
+   stays German like the rest of the history; `Review` is the German-template follow-up value.)
 
-Bei Neubauten (Schritt 6, z. B. nach Korrekturen aus dem Bericht) dieselben `--migration-*`-Werte
-erneut mitgeben — Version und Folgeaktion werden nicht erneut erfragt.
+**Never write a review row** — a review is a manual process.
 
-## Schritt 9 — Bericht zur Freigabe
+For rebuilds (Step 6, e.g. after corrections from the report), pass the same `--migration-*` values
+again — version and follow-up action are not asked for again.
 
-Klartext-Zusammenfassung pro Datei — **nie die rohe `.nsd` zeigen**:
+## Step 9 — Report for approval
 
-* Zieldatei, Anzahl Schritte (Blatt/Struktur) und welche Verzweigungen/Schleifen/Exceptions
-  erkannt wurden (kurz, mit Schrittüberschrift)
-* Bilder (Anzahl, wohin)
-* Historie (übernommene Zeilen + Migrationszeile)
-* **Ergebnis der Treueprüfung** (`checkedParagraphs`, `missing` leer?)
-* **Freigegebene Umformulierungen** (`reworded` aus Build/Verify) als eigener Abschnitt: je
-  Eintrag Originalabsatz → neue Formulierung. Nicht mit den ignorierten Texten vermischen.
-* **Alles Nicht-Abbildbare und alle Warnungen** (Zellverbünde, abgeflachte Listen, Fußnoten,
-  Textfelder, Nicht-PNG-Bilder, defaultete Zweigbezeichnungen)
-* **Liste der ignorierten Texte**, gruppiert nach Begründung (`ignored` aus der Build-Antwort), damit
-  der Nutzer sieht, was bewusst nicht als eigener Inhalt übernommen wurde
-* offene Zweifelsfälle
+Plain-text summary per file — **never show the raw `.nsd`**:
 
-Das ist der erste und einzige Freigabepunkt je Datei. Der Arbeitsordner unter `.claude/tmp/scratch/`
-bleibt für Rückfragen liegen (Bilder und `extract.json`); Pfad nennen.
+* Target file, number of steps (leaf/structure) and which branches/loops/exceptions were detected
+  (briefly, with step heading)
+* Images (count, where to)
+* History (carried-over rows + migration row)
+* **Result of the fidelity check** (`checkedParagraphs`, `missing` empty?)
+* **Approved rewordings** (`reworded` from build/verify) as a separate section: per entry original
+  paragraph → new wording. Do not mix with the ignored texts.
+* **Everything not representable and all warnings** (merged cells, flattened lists, footnotes, text
+  boxes, non-PNG images, defaulted branch labels)
+* **List of ignored texts**, grouped by reason (`ignored` from the build response), so the user sees
+  what was deliberately not carried over as its own content
+* open doubtful cases
+
+This is the first and only approval point per file. The working folder under `.claude/tmp/scratch/`
+stays in place for follow-up questions (images and `extract.json`); name the path.

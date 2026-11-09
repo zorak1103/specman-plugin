@@ -18,10 +18,10 @@ function insertIndex(position, length) {
   if (position === 'start') return 0;
   if (position === 'end') return length;
   const m = typeof position === 'string' && position.match(/^after:tail\[(\d+)\]$/);
-  if (!m) throw new Error(`nsd-insert-image: ungültige position '${position}' (erwartet: start, end, oder after:tail[<i>]).`);
+  if (!m) throw new Error(`nsd-insert-image: invalid position '${position}' (expected: start, end, or after:tail[<i>]).`);
   const after = Number(m[1]);
   if (!(after >= 0 && after < length)) {
-    throw new Error(`nsd-insert-image: position '${position}' verweist auf einen nicht existierenden Index (0..${length - 1}).`);
+    throw new Error(`nsd-insert-image: position '${position}' refers to a non-existent index (0..${length - 1}).`);
   }
   return after + 1;
 }
@@ -32,7 +32,7 @@ export function applyInsertImage(text, { stepSelector, png, scalePercent, positi
 
   let found;
   try { found = resolveTarget(ast, stepSelector); } catch (e) { return { ok: false, error: e.message }; }
-  if (!found) return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+  if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
 
   try {
     const area = buildArea({ kind: 'image', png, scalePercent });
@@ -48,7 +48,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
   for (const required of ['file', 'step', 'png']) {
-    if (args[required] === undefined) { report({ ok: false, error: `--${required} ist Pflicht.` }, { json }); return; }
+    if (args[required] === undefined) { report({ ok: false, error: `--${required} is required.` }, { json }); return; }
   }
   let text;
   let png;
@@ -56,7 +56,7 @@ function main() {
     text = readFileSync(args.file, 'utf8');
     png = readFileSync(args.png);
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${e.message}` }, { json });
+    report({ ok: false, error: `File not readable: ${e.message}` }, { json });
     return;
   }
   const result = applyInsertImage(text, {
@@ -64,7 +64,7 @@ function main() {
     scalePercent: args.scale !== undefined ? Number(args.scale) : undefined,
   });
   if (result.ok) writeFileSync(args.file, result.text);
-  report(result.ok ? { ok: true, areaKey: result.areaKey } : result, { json, plainText: (r) => `Bild eingefügt (${r.areaKey}).` });
+  report(result.ok ? { ok: true, areaKey: result.areaKey } : result, { json, plainText: (r) => `Image inserted (${r.areaKey}).` });
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) main();

@@ -22,7 +22,7 @@ const DEFAULT_TEMPLATE = join(dirname(fileURLToPath(import.meta.url)), '..', 're
 
 function readJson(path, what) {
   try { return { value: JSON.parse(readFileSync(path, 'utf8')) }; } catch (e) {
-    return { error: `${what} nicht lesbar/parsebar: ${path} (${e.message})` };
+    return { error: `${what} not readable/parsable: ${path} (${e.message})` };
   }
 }
 
@@ -30,7 +30,7 @@ export const MIGRATION_ACTIVITY = 'Migration von Word nach Specman';
 
 export function buildFile({ planPath, extractPath, outPath, templatePath = DEFAULT_TEMPLATE, force = false, migration }) {
   if (existsSync(outPath) && !force) {
-    return { ok: false, error: `Zieldatei existiert bereits: ${outPath} (nur mit --force überschreiben, vorher den Nutzer fragen).` };
+    return { ok: false, error: `Target file already exists: ${outPath} (overwrite only with --force, ask the user first).` };
   }
   const plan = readJson(planPath, 'Plan');
   if (plan.error) return { ok: false, error: plan.error };
@@ -38,7 +38,7 @@ export function buildFile({ planPath, extractPath, outPath, templatePath = DEFAU
   if (extract.error) return { ok: false, error: extract.error };
   let templateText;
   try { templateText = readFileSync(templatePath, 'utf8'); } catch (e) {
-    return { ok: false, error: `Vorlage nicht lesbar: ${templatePath} (${e.message})` };
+    return { ok: false, error: `Template not readable: ${templatePath} (${e.message})` };
   }
 
   const built = buildFromPlan({ templateText, plan: plan.value, extract: extract.value });
@@ -75,11 +75,11 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
   for (const required of ['plan', 'extract', 'out']) {
-    if (args[required] === undefined) { report({ ok: false, error: `--${required} ist Pflicht.` }, { json }); return; }
+    if (args[required] === undefined) { report({ ok: false, error: `--${required} is required.` }, { json }); return; }
   }
   const flags = ['version', 'author', 'followup'].map((k) => args[`migration-${k}`]);
   if (flags.some((v) => v !== undefined) && flags.some((v) => v === undefined)) {
-    report({ ok: false, error: '--migration-version, --migration-author und --migration-followup nur gemeinsam angeben.' }, { json });
+    report({ ok: false, error: 'Specify --migration-version, --migration-author and --migration-followup together or not at all.' }, { json });
     return;
   }
   const migration = flags[0] === undefined ? undefined : { version: flags[0], author: flags[1], followup: flags[2] };
@@ -89,7 +89,7 @@ function main() {
   });
   report(result, {
     json,
-    plainText: (r) => `gebaut: ${r.out} (${r.summary.steps} Schritte, ${r.summary.images} Bilder, ${r.ignored.length} begründet ignoriert, ${r.summary.rewordedTexts} umformuliert)`,
+    plainText: (r) => `built: ${r.out} (${r.summary.steps} steps, ${r.summary.images} images, ${r.ignored.length} ignored with reason, ${r.summary.rewordedTexts} reworded)`,
   });
 }
 

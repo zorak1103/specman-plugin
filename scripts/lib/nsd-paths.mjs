@@ -50,9 +50,9 @@ function walkStepChildren(step, parentKey, out) {
  * addressableAreas/listTailAreas/resolveArea/resolveTailContainer work on it unchanged.
  */
 export function blockAsStep(ast, name) {
-  if (name !== 'intro' && name !== 'outro') throw new Error(`nsd-paths: unbekannter Block '${name}' (erwartet: intro|outro)`);
+  if (name !== 'intro' && name !== 'outro') throw new Error(`nsd-paths: unknown block '${name}' (expected: intro|outro)`);
   const node = ast[name];
-  if (!node) throw new Error(`nsd-paths: die Spezifikation hat keinen ${name}-Block.`);
+  if (!node) throw new Error(`nsd-paths: the specification has no ${name} block.`);
   return { content: node };
 }
 
@@ -99,19 +99,19 @@ export function listCatches(ast) {
 export function catchTargetFor(ast, breakStepId, parentKey) {
   const found = findStep(ast, { stepId: breakStepId });
   if (!found || found.step.kind !== 'break') {
-    throw new Error(`nsd-paths: '${breakStepId}' ist kein break-Schritt.`);
+    throw new Error(`nsd-paths: '${breakStepId}' is not a break step.`);
   }
   const byKey = new Map(listSequences(ast).map((s) => [s.key, s]));
   const chain = [];
   for (let k = found.parentKey; k; k = byKey.get(k).parentKey) chain.push(byKey.get(k));
   const allowed = chain.filter((s) => s.canHaveCatch);
   if (parentKey === undefined) {
-    if (allowed.length === 0) throw new Error(`nsd-paths: kein Vorfahr des break-Schritts '${breakStepId}' darf einen catch-Block tragen.`);
+    if (allowed.length === 0) throw new Error(`nsd-paths: no ancestor of break step '${breakStepId}' may carry a catch block.`);
     return allowed[0];
   }
   const target = allowed.find((s) => s.key === parentKey);
   if (!target) {
-    throw new Error(`nsd-paths: '${parentKey}' ist kein Vorfahr des break-Schritts '${breakStepId}', der einen catch-Block tragen darf (möglich: ${allowed.map((s) => s.key).join(', ') || 'keine'}).`);
+    throw new Error(`nsd-paths: '${parentKey}' is not an ancestor of break step '${breakStepId}' that may carry a catch block (possible: ${allowed.map((s) => s.key).join(', ') || 'none'}).`);
   }
   return target;
 }

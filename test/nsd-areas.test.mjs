@@ -17,8 +17,8 @@ test('buildArea list builds items with optional tails', () => {
 });
 
 test('buildArea table requires equal row lengths and matching cols', () => {
-  assert.throws(() => buildArea({ kind: 'table', rows: [[{ html: 'a' }, { html: 'b' }], [{ html: 'c' }]] }), /Zeile 1 hat 1 Zellen/);
-  assert.throws(() => buildArea({ kind: 'table', cols: [50], rows: [[{ html: 'a' }, { html: 'b' }]] }), /cols hat 1 Werte/);
+  assert.throws(() => buildArea({ kind: 'table', rows: [[{ html: 'a' }, { html: 'b' }], [{ html: 'c' }]] }), /row 1 has 1 cells/);
+  assert.throws(() => buildArea({ kind: 'table', cols: [50], rows: [[{ html: 'a' }, { html: 'b' }]] }), /cols has 1 values/);
   const table = buildArea({ kind: 'table', cols: [30, 70], rows: [[{ html: 'a' }, { html: 'b' }]] });
   assert.deepEqual(table.cols, ['30%', '70%']);
   assert.equal(table.widthPercent, '96%');
@@ -36,10 +36,10 @@ test('buildArea image rejects non-PNG data', () => {
 });
 
 test('buildArea rejects unknown kinds and out-of-range percentages', () => {
-  assert.throws(() => buildArea({ kind: 'video' }), /unbekannte Area-Art/);
-  assert.throws(() => buildArea({ kind: 'image', png: TINY_PNG, scalePercent: 150 }), /Prozentwert/);
+  assert.throws(() => buildArea({ kind: 'video' }), /unknown area kind/);
+  assert.throws(() => buildArea({ kind: 'image', png: TINY_PNG, scalePercent: 150 }), /percentage/);
 });
 
 test('buildArea rejects a backtick in html', () => {
-  assert.throws(() => buildArea({ kind: 'text', html: 'a`b' }), /Backtick/);
+  assert.throws(() => buildArea({ kind: 'text', html: 'a`b' }), /backtick/);
 });

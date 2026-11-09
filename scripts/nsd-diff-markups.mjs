@@ -47,7 +47,7 @@ export function computeMarkups({ oldPlain, newPlain, changeset, __forceSpan }) {
   const span = __forceSpan ?? diffPlainText(oldPlain, newPlain);
   if (span === null) return { ok: true, markups: [] };
   if (span.from < 0 || span.to >= newPlain.length || span.to < span.from) {
-    return { ok: false, error: `berechneter Markup-Bereich liegt außerhalb (out of range) von plain=: ${JSON.stringify(span)}` };
+    return { ok: false, error: `computed markup range is out of range of plain=: ${JSON.stringify(span)}` };
   }
   return { ok: true, markups: [{ from: span.from, to: span.to, type: 'Changed', changeset }] };
 }
@@ -61,7 +61,7 @@ export function applyDiffMarkups(text, { stepSelector, areaKey, oldPlain, change
   }
   const selector = /^[0-9a-f]{8}$/.test(stepSelector) ? { stepId: stepSelector } : { stepNum: stepSelector };
   const found = findStep(ast, selector);
-  if (!found) return { ok: false, error: `Schritt nicht gefunden: ${stepSelector}` };
+  if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
 
   let area;
   try {
@@ -73,7 +73,7 @@ export function applyDiffMarkups(text, { stepSelector, areaKey, oldPlain, change
   if (area.plain === undefined) {
     return {
       ok: false,
-      error: 'plain= ist auf diesem Bereich nicht gesetzt — erst sanitizen, damit plain= aktuell ist, dann erneut aufrufen.',
+      error: 'plain= is not set on this area — sanitize first so plain= is current, then call again.',
     };
   }
 
@@ -88,7 +88,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   for (const required of ['file', 'step', 'area', 'old-plain', 'changeset']) {
     if (args[required] === undefined) {
-      report({ ok: false, error: `--${required} ist Pflicht.` }, { json: !!args.json });
+      report({ ok: false, error: `--${required} is required.` }, { json: !!args.json });
       return;
     }
   }
@@ -96,7 +96,7 @@ function main() {
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json: !!args.json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json: !!args.json });
     return;
   }
   const result = applyDiffMarkups(text, {

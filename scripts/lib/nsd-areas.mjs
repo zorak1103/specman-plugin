@@ -25,22 +25,22 @@ function makeContent(html, tail) {
 function percent(n, fallback) {
   const value = n === undefined ? fallback : n;
   if (!(Number(value) > 0 && Number(value) <= 100)) {
-    throw new Error(`nsd-areas: Prozentwert muss in (0,100] liegen, erhalten: ${value}`);
+    throw new Error(`nsd-areas: percentage must be in (0,100], got: ${value}`);
   }
   return `${Number(value)}%`;
 }
 
 function buildTable(spec) {
-  if (!Array.isArray(spec.rows) || spec.rows.length === 0) throw new Error('nsd-areas: table braucht mindestens eine Zeile.');
+  if (!Array.isArray(spec.rows) || spec.rows.length === 0) throw new Error('nsd-areas: table needs at least one row.');
   const columnCount = spec.rows[0].length;
-  if (columnCount === 0) throw new Error('nsd-areas: table-Zeile ohne Zellen.');
+  if (columnCount === 0) throw new Error('nsd-areas: table row without cells.');
   spec.rows.forEach((row, r) => {
     if (row.length !== columnCount) {
-      throw new Error(`nsd-areas: table-Zeile ${r} hat ${row.length} Zellen, Zeile 0 hat ${columnCount}.`);
+      throw new Error(`nsd-areas: table row ${r} has ${row.length} cells, row 0 has ${columnCount}.`);
     }
   });
   if (spec.cols && spec.cols.length !== columnCount) {
-    throw new Error(`nsd-areas: cols hat ${spec.cols.length} Werte, die Tabelle ${columnCount} Spalten.`);
+    throw new Error(`nsd-areas: cols has ${spec.cols.length} values but the table has ${columnCount} columns.`);
   }
   return {
     kind: 'table',
@@ -54,7 +54,7 @@ function buildTable(spec) {
 function buildImage(spec) {
   const png = Buffer.isBuffer(spec.png) ? spec.png : Buffer.from(spec.png ?? []);
   if (png.length < PNG_SIGNATURE.length || !png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
-    throw new Error('nsd-areas: image erwartet PNG-Daten (Signatur stimmt nicht) — andere Formate vorher nach PNG konvertieren.');
+    throw new Error('nsd-areas: image expects PNG data (signature mismatch) — convert other formats to PNG first.');
   }
   return {
     kind: 'image',
@@ -68,7 +68,7 @@ function buildImage(spec) {
 export function buildArea(spec) {
   if (spec.kind === 'text') return { kind: 'text', content: makeHtmlContent(spec.html), change: undefined };
   if (spec.kind === 'list') {
-    if (!Array.isArray(spec.items) || spec.items.length === 0) throw new Error('nsd-areas: list braucht mindestens ein Item.');
+    if (!Array.isArray(spec.items) || spec.items.length === 0) throw new Error('nsd-areas: list needs at least one item.');
     return {
       kind: 'list',
       ordered: !!spec.ordered,
@@ -77,5 +77,5 @@ export function buildArea(spec) {
   }
   if (spec.kind === 'table') return buildTable(spec);
   if (spec.kind === 'image') return buildImage(spec);
-  throw new Error(`nsd-areas: unbekannte Area-Art '${spec.kind}' (erwartet text|list|table|image).`);
+  throw new Error(`nsd-areas: unknown area kind '${spec.kind}' (expected text|list|table|image).`);
 }

@@ -49,7 +49,7 @@ test('locate with an 8-hex-char selector treats it as a step ID, not a number', 
 test('locate reports a clear error for an unknown step', () => {
   const result = locate(src, '99');
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });
 
 test('locate reports a clear error for an unparseable file instead of throwing', () => {

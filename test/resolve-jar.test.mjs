@@ -40,19 +40,19 @@ test('resolveJarPath fails clearly when SPECMAN_JAR is not set', () => {
   const result = resolveJarPath({});
   assert.equal(result.ok, false);
   assert.match(result.error, /SPECMAN_JAR/);
-  assert.match(result.error, /nicht gesetzt/);
+  assert.match(result.error, /is not set/);
 });
 
 test('resolveJarPath treats a blank SPECMAN_JAR like an unset one', () => {
   const result = resolveJarPath({ SPECMAN_JAR: '   ' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gesetzt/);
+  assert.match(result.error, /is not set/);
 });
 
 test('resolveJarPath fails clearly when SPECMAN_JAR points at a nonexistent file', () => {
   const result = resolveJarPath({ SPECMAN_JAR: 'C:/nonexistent/specman.jar' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });
 
 test('resolveJarPath rejects a SPECMAN_JAR that points at a directory', () => {
@@ -62,7 +62,7 @@ test('resolveJarPath rejects a SPECMAN_JAR that points at a directory', () => {
   try {
     const result = resolveJarPath({ SPECMAN_JAR: jarDir });
     assert.equal(result.ok, false);
-    assert.match(result.error, /Verzeichnis/);
+    assert.match(result.error, /directory/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -80,7 +80,7 @@ test('resolveJarPath rejects a .jar file that is not a ZIP archive', () => {
   withTempJar('specman-1.4.0-jar-with-dependencies.jar', 'not a real jar', (p) => {
     const result = resolveJarPath({ SPECMAN_JAR: p });
     assert.equal(result.ok, false);
-    assert.match(result.error, /kein gültiges Jar|ZIP/);
+    assert.match(result.error, /not a ZIP archive/);
   });
 });
 
@@ -90,7 +90,7 @@ test('resolveJarPath strips surrounding quotes from SPECMAN_JAR and warns about 
     assert.equal(result.ok, true);
     assert.equal(result.path, jarPath);
     assert.equal(result.warnings.length, 1);
-    assert.match(result.warnings[0], /Anführungszeichen/);
+    assert.match(result.warnings[0], /quotes/);
   });
 });
 
@@ -110,7 +110,7 @@ test('resolveJarPath warns when the version cannot be read from the file name', 
     assert.equal(result.ok, true);
     assert.equal(result.version, null);
     assert.equal(result.warnings.length, 1);
-    assert.match(result.warnings[0], /Version/);
+    assert.match(result.warnings[0], /version/i);
   });
 });
 

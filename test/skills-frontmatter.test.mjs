@@ -61,24 +61,24 @@ test('skills frontmatter: migrate never grants Edit (the .nsd is only produced b
 
 test('skills content: migrate states the no-logic-lost rule', () => {
   const text = fs.readFileSync(path.join(PLUGIN_ROOT, 'skills', 'migrate', 'SKILL.md'), 'utf8');
-  assert.match(text, /Keine Logik darf verloren gehen/);
+  assert.match(text, /No logic may be lost/);
 });
 
 test('skills content: migrate forbids the System:/User: step prefix', () => {
   const text = fs.readFileSync(path.join(PLUGIN_ROOT, 'skills', 'migrate', 'SKILL.md'), 'utf8');
-  assert.match(text, /Formulierungen ohne Präfix `System:` \/ `User:`/);
+  assert.match(text, /without the `System:` \/ `User:` prefix/);
 });
 
 // Skills that run the sanitizer must verify SPECMAN_JAR up front, before any file is touched —
 // otherwise the user only learns about a missing/wrong jar after all the edits are done.
 for (const skill of ['plan', 'edit', 'migrate']) {
-  test(`skills content: ${skill} checks SPECMAN_JAR up front, before Schritt 1`, () => {
+  test(`skills content: ${skill} checks SPECMAN_JAR up front, before Step 1`, () => {
     const text = fs.readFileSync(path.join(PLUGIN_ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
-    const step0 = text.indexOf('## Schritt 0');
-    const step1 = text.indexOf('## Schritt 1');
-    assert.ok(step0 !== -1, `${skill}/SKILL.md has no "## Schritt 0" preflight section`);
+    const step0 = text.indexOf('## Step 0');
+    const step1 = text.indexOf('## Step 1');
+    assert.ok(step0 !== -1, `${skill}/SKILL.md has no "## Step 0" preflight section`);
     const preflight = text.slice(step0, step1 === -1 ? undefined : step1);
-    assert.ok(step1 === -1 || step0 < step1, `${skill}: Schritt 0 must come before Schritt 1`);
+    assert.ok(step1 === -1 || step0 < step1, `${skill}: Step 0 must come before Step 1`);
     assert.match(preflight, /resolve-jar\.mjs/);
     assert.match(preflight, /warnings/, `${skill}: preflight must say what to do with warnings`);
   });
@@ -86,7 +86,7 @@ for (const skill of ['plan', 'edit', 'migrate']) {
 
 // sanitize.mjs may return a `warnings` array (jar older than 1.4, spec newer than the jar). The
 // skills only surface it if their sanitize step says so.
-for (const [skill, heading] of [['plan', '## Schritt 7'], ['edit', '## Schritt 6'], ['migrate', '## Schritt 7']]) {
+for (const [skill, heading] of [['plan', '## Step 7'], ['edit', '## Step 6'], ['migrate', '## Step 7']]) {
   test(`skills content: ${skill} tells the agent to show sanitize warnings`, () => {
     const text = fs.readFileSync(path.join(PLUGIN_ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
     const start = text.indexOf(heading);

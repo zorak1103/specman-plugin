@@ -39,8 +39,8 @@ correctly, fast, and reporting the sanitizer's verdict.
   early `ERROR` is easier to diagnose than a late one compounded by several more edits.
 - On `ERROR` from any script or from `sanitize.mjs`, stop and report the exact message — do not
   guess a fix and do not retry blindly more than once.
-- Never write a Dokumentenhistorie entry (`nsd-history.mjs`) — that needs a user dialog (version,
-  Folgeaktion) and stays with the dispatching `edit` skill, not this subagent. Writing one here
+- Never write a document-history entry (`nsd-history.mjs`) — that needs a user dialog (version,
+  follow-up action) and stays with the dispatching `edit` skill, not this subagent. Writing one here
   would risk a duplicate row when `edit` adds its own summary afterward.
 
 ## Report back

@@ -41,7 +41,7 @@ test('readHistory returns header and data rows from the intro table', () => {
 test('readHistory reports a clear error when no matching table exists', () => {
   const result = readHistory(noTableSrc);
   assert.equal(result.ok, false);
-  assert.match(result.error, /Dokumentenhistorie/);
+  assert.match(result.error, /document history table/);
 });
 
 test('fillInitial writes author, date and Review into the empty template row', () => {
@@ -106,7 +106,7 @@ test('appendRow rejects a literal backtick in a value', () => {
     version: '0.2', activity: 'Enthält `Backtick`', author: 'M. Mustermann', date: '17.09.2026', followup: 'Review',
   });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Backtick/);
+  assert.match(result.error, /backtick/i);
 });
 
 test('appendRow reports a clear error when no matching table exists', () => {
@@ -114,7 +114,7 @@ test('appendRow reports a clear error when no matching table exists', () => {
     version: '0.2', activity: 'x', author: 'x', date: '17.09.2026', followup: '-',
   });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Dokumentenhistorie/);
+  assert.match(result.error, /document history table/);
 });
 
 test('fillInitial writes the given followup instead of the Review default', () => {
@@ -148,12 +148,28 @@ test('importRows replaces all data rows and keeps empty cells (Review rows)', as
 
 test('importRows refuses empty input and rows with the wrong cell count', async () => {
   const { importRows } = await import('../scripts/nsd-history.mjs');
-  assert.match(importRows(initialTemplateSrc, { rows: [] }).error, /mindestens eine Zeile/);
-  assert.match(importRows(initialTemplateSrc, { rows: [['0.1', 'x']] }).error, /Zeile 0 hat 2 Zellen/);
+  assert.match(importRows(initialTemplateSrc, { rows: [] }).error, /at least one row/);
+  assert.match(importRows(initialTemplateSrc, { rows: [['0.1', 'x']] }).error, /Row 0 has 2 cells/);
 });
 
 test('importRows reports a clear error when no matching table exists and rejects backticks', async () => {
   const { importRows } = await import('../scripts/nsd-history.mjs');
-  assert.match(importRows(noTableSrc, { rows: [['a', 'b', 'c', 'd', 'e']] }).error, /Dokumentenhistorie/);
-  assert.match(importRows(initialTemplateSrc, { rows: [['0.1', 'a`b', 'c', 'd', 'e']] }).error, /Backtick/);
+  assert.match(importRows(noTableSrc, { rows: [['a', 'b', 'c', 'd', 'e']] }).error, /document history table/);
+  assert.match(importRows(initialTemplateSrc, { rows: [['0.1', 'a`b', 'c', 'd', 'e']] }).error, /backtick/i);
+});
+
+test('readHistory finds the history table when its header is in English', () => {
+  const src = withHistoryTable([]).replace(
+    'cell(`Aktivität`) | cell(`Autor`) | cell(`Datum`) | cell(`Folgeaktion`)',
+    'cell(`Activity`) | cell(`Author`) | cell(`Date`) | cell(`Follow-up`)',
+  );
+  const result = readHistory(src);
+  assert.equal(result.ok, true);
+  assert.equal(result.columnCount, 5);
+});
+
+test('readHistory reports a missing table in English', () => {
+  const result = readHistory(noTableSrc);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /No document history table found in the intro block/);
 });

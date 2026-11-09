@@ -1,7 +1,7 @@
 ---
 name: implement
-description: "Reads a Specman SUC .nsd specification and either implements the corresponding code directly (small SUCs) or proposes a phased implementation plan for it (large SUCs), with SUC-XXX Schritt N (ID: xxx) references in the generated Javadoc/JSDoc comments. Use only when code needs to be written or changed to match an existing spec. Not for editing the spec itself (use edit) or creating a new one (use plan)."
-argument-hint: "<suc-datei>"
+description: "Reads a Specman SUC .nsd specification and either implements the corresponding code directly (small SUCs) or proposes a phased implementation plan for it (large SUCs), with SUC-XXX Step N (ID: xxx) references in the generated Javadoc/JSDoc comments. Use only when code needs to be written or changed to match an existing spec. Not for editing the spec itself (use edit) or creating a new one (use plan)."
+argument-hint: "<suc-file>"
 allowed-tools:
   - Read
   - Write
@@ -14,57 +14,58 @@ allowed-tools:
 
 # implement
 
-## Schritt 1 — Spezifikation lesen
+## Step 1 — Read the specification
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <suc-datei> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <suc-file> --json
 ```
 
-Schlägt der Aufruf mit einem Hinweis auf V001/`modelType` fehl: Stopp, Nutzer bitten, die Datei
-einmal in Specman 1.3.0+ zu öffnen und zu speichern. `sequences` gibt einen Überblick über die
-Struktur (Anzahl Hauptschritte je Sequenz); für den vollen Ablauftext gezielt mit `--step` pro
-Hauptschritt nachfragen (siehe `edit`-Skill für die Adressierung).
+If the call fails with a hint about V001/`modelType`: stop, ask the user to open and save the file
+once in Specman 1.3.0+. `sequences` gives an overview of the structure (number of main steps per
+sequence); for the full flow text, query each main step specifically with `--step` (see the
+`edit` skill for addressing).
 
-## Schritt 2 — Umfang einschätzen
+## Step 2 — Assess the scope
 
-Grober Anhaltspunkt: mehr als ~15-20 Schritte insgesamt, mehrere Akteure, oder mehrere
-unabhängige Ausnahmepfade sprechen für "groß". Bei Unsicherheit lieber nachfragen als raten.
+Rough guideline: more than ~15-20 steps in total, several actors, or several independent
+exception paths suggest "large". When in doubt, ask rather than guess.
 
-**Bei großem Umfang:**
+**For a large scope:**
 
-> „Der zu implementierende SUC ist sehr groß, ich würde nicht zur Umsetzung sondern stattdessen
-> einen phasenweisen Umsetzungsplan erstellen."
+> "The SUC to be implemented is very large. Instead of implementing it directly, I would create a
+> phased implementation plan."
 
-`AskUserQuestion` (`header: "Umfang"`) — Zustimmung? Bei Ja: einen Phasenplan als Markdown-Datei
-erstellen (Ablageort per Rückfrage; ohne Vorgabe neben der `.nsd`-Datei). Pro Phase: Schrittbereich
-(Schritt-IDs aus `nsd-locate`), betroffene Komponenten/Dateien, Abhängigkeiten zu anderen Phasen
-und ein Prüfkriterium. Danach ausdrücklich sagen: **die Phasen werden in eigenen Sessions
-umgesetzt** — in dieser Session nicht mit der Implementierung weitermachen, auch nicht teilweise.
+`AskUserQuestion` (`header: "Scope"`) — agreement? If yes: create a phase plan as a Markdown file
+(location by follow-up question; without a preference, next to the `.nsd` file). Per phase: step
+range (step IDs from `nsd-locate`), affected components/files, dependencies on other phases, and
+an acceptance criterion. Then state explicitly: **the phases are implemented in separate
+sessions** — do not continue with the implementation in this session, not even partially.
 
-**Bei kleinem Umfang:** weiter mit Schritt 3.
+**For a small scope:** continue with Step 3.
 
-## Schritt 3 — Direkt umsetzen
+## Step 3 — Implement directly
 
-Normale Implementierungsarbeit — bestehende Muster im Zielprojekt befolgen, Tests wie im Projekt
-üblich. Zusätzlich, wo eine Methode/Klasse einen Schritt der Spezifikation umsetzt, eine
-Referenz im Javadoc- bzw. JSDoc-Kommentar ergänzen:
+Normal implementation work — follow existing patterns in the target project, tests as is usual
+in the project. In addition, where a method/class implements a step of the specification, add a
+reference in the Javadoc or JSDoc comment:
 
 ```
-SUC-<nummer> Schritt <aktuelle-nummer> (ID: <id>)
+SUC-<number> Step <current-number> (ID: <id>)
 ```
 
-Die aktuelle Nummer und ID **immer frisch aus `nsd-locate` übernehmen**, nie aus dem Gedächtnis
-oder aus einer alten Referenz im Code kopieren — Schrittnummern verschieben sich bei jeder
-Sanitize-Runde.
+**Always take the current number and ID fresh from `nsd-locate`**, never copy them from memory or
+from an old reference in the code — step numbers shift with every sanitize round.
 
-Triffst du auf eine bereits bestehende Referenz mit einer Nummer, die nicht mehr zum aktuellen
-Stand der `.nsd`-Datei passt: die ID ist der stabile Anker, korrigiere die Nummer (siehe auch das
-eigenständige `sync-refs`-Skill für einen ganzen Datei-/Projektlauf).
+If you come across an existing reference whose number no longer matches the current state of the
+`.nsd` file: the ID is the stable anchor, correct the number (see also the standalone `sync-refs`
+skill for a whole file/project run). Older comments may use the legacy German keyword `Schritt`
+instead of `Step` (`SUC-<number> Schritt <n> (ID: <id>)`); when correcting those, change only the
+number and keep the keyword the comment already uses.
 
-## Schritt 4 — Referenzen synchron halten
+## Step 4 — Keep references in sync
 
-Nach der Implementierung, oder wenn nur bestehende Referenzen aufgefrischt werden sollen, ohne
-sonst etwas zu ändern:
+After the implementation, or when only existing references should be refreshed without changing
+anything else:
 
 ```
 /specman:sync-refs

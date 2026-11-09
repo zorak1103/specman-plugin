@@ -27,6 +27,6 @@ test('paragraphsToHtml emits one div per non-empty paragraph', () => {
 });
 
 test('assertNoBacktick rejects a literal backtick', () => {
-  assert.throws(() => assertNoBacktick('a`b', 'x'), /Backtick/);
+  assert.throws(() => assertNoBacktick('a`b', 'x'), /backtick/);
   assert.doesNotThrow(() => assertNoBacktick('a&#96;b', 'x'));
 });

@@ -33,7 +33,7 @@ function wrapBacktick(content) { return `\`${content}\``; }
 // loud parse error at write time, but a corrupted file discovered only later.
 export function assertValidHtml(html) {
   if (typeof html === 'string' && html.includes('`')) {
-    throw new Error("nsd-ast: HTML-Inhalt darf kein Backtick (`) enthalten — es würde den BACKTICK_STRING-Token vorzeitig beenden.");
+    throw new Error("nsd-ast: HTML content must not contain a backtick (`) — it would end the BACKTICK_STRING token prematurely.");
   }
 }
 

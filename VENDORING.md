@@ -1,68 +1,65 @@
-# Vendoring — Herkunft und Aktualisierung der Referenzdateien
+# Vendoring — Origin and Update Procedure of the Reference Files
 
-Dieses Dokument ist **nicht Teil des Plugin-Verhaltens** — kein Skill, kein Agent und kein Script
-liest diese Datei zur Laufzeit. Sie dient ausschließlich der Pflege des Plugins selbst: woher die
-Dateien unter `reference/` stammen und wie sie bei einem Update von Specman neu bezogen werden.
+This document is **not part of the plugin's behavior** — no skill, agent or script reads this file
+at runtime. It serves exclusively for maintaining the plugin itself: where the files under
+`reference/` come from and how to re-fetch them when Specman is updated.
 
-## Quelle
+## Source
 
-Upstream-Repository: `https://github.com/j-specman/specman`
-Lizenz: BSD-3-Clause-artig (`license.txt` im Upstream-Repo) — Redistribution mit Copyright-Hinweis
-und Haftungsausschluss ist erlaubt. Beim Neu-Vendoring den Lizenztext gegenprüfen, falls sich das
-Upstream-Projekt umlizenziert.
+Upstream repository: `https://github.com/j-specman/specman`
+License: BSD-3-Clause-like (`license.txt` in the upstream repo) — redistribution with copyright
+notice and disclaimer is permitted. When re-vendoring, check the license text again in case the
+upstream project has been relicensed.
 
-## Vendorte Dateien
+## Vendored files
 
-| Datei hier | Upstream-Pfad | Bezogen am |
+| File here | Upstream path | Retrieved on |
 |---|---|---|
 | `reference/SpecmanModel_V002.g4` | `src/main/antlr4/specman/model/v002/SpecmanModel_V002.g4` | 2026-11-09 (Specman 1.4.0) |
-| `reference/specman-reference-v1.4-model-v2.nsd` | `specman-reference-v1.4-model-v2.nsd` (Repo-Root, Tag `v1.4.0`) | 2026-11-09 |
-| `reference/specman-reference-v1.3-model-v2.nsd` | `specman-reference-v1.3-model-v2.nsd` (Repo-Root) | 2026-09-16 |
+| `reference/specman-reference-v1.4-model-v2.nsd` | `specman-reference-v1.4-model-v2.nsd` (repo root, tag `v1.4.0`) | 2026-11-09 |
+| `reference/specman-reference-v1.3-model-v2.nsd` | `specman-reference-v1.3-model-v2.nsd` (repo root) | 2026-09-16 |
 
-Die 1.3-Referenz bleibt als Regressionsfixture erhalten: Dateien, die noch mit Specman 1.3 gespeichert
-wurden, müssen weiter parsen. Beim nächsten Update die neue Referenz **hinzufügen**, nicht die alte
-ersetzen.
+The 1.3 reference is kept as a regression fixture: files that were still saved with Specman 1.3 must
+continue to parse. At the next update, **add** the new reference, do not replace the old one.
 
-`reference/suc-template.nsd` ist **keine Upstream-Datei** — sie ist projekteigen (abgeleitet aus
-`suc-template.nsd`, ursprünglich im alten V001-JSON-Format, von Hand einmal in Specman 1.3.0
-geöffnet und gespeichert, um sie auf das V2-Textformat zu heben). Bei einer Aktualisierung dieser
-Datei: in Specman öffnen, prüfen, speichern, dann hierher kopieren — kein Bezug von GitHub nötig.
+`reference/suc-template.nsd` is **not an upstream file** — it is project-owned (the SUC template,
+in German; derived from `suc-template.nsd`, originally in the old V001 JSON format, opened and
+saved once by hand in Specman 1.3.0 to lift it to the V2 text format). To update this file: open it
+in Specman, check it, save it, then copy it here — no download from GitHub needed.
 
-## Was bewusst NICHT vendort wird
+## What is deliberately NOT vendored
 
-- Die Sanitizer-Jar (`specman-*-jar-with-dependencies.jar`, ~50–70 MB) — zu groß fürs Git-Repo.
-  Nutzer:innen stellen den Pfad über die Environment-Variable `SPECMAN_JAR` bereit (siehe
-  `README.adoc`).
-- `gutenmorgen.nsd` — persönliches Scratch-File aus der lokalen Specman-Installation, kein
-  Distributionsbestandteil.
-- `specman.bat` — der Launcher hat aktuell einen Bug (`%1` statt `%*`, verschluckt Argumente wie
-  `--sanitize <file>`); das Plugin ruft `java -jar` ohnehin direkt auf und umgeht die `.bat`
-  vollständig.
+- The sanitizer jar (`specman-*-jar-with-dependencies.jar`, ~50–70 MB) — too large for the Git repo.
+  Users provide the path via the environment variable `SPECMAN_JAR` (see `README.adoc`).
+- `gutenmorgen.nsd` — personal scratch file from the local Specman installation, not part of the
+  distribution.
+- `specman.bat` — the launcher currently has a bug (`%1` instead of `%*`, swallows arguments such as
+  `--sanitize <file>`); the plugin calls `java -jar` directly anyway and bypasses the `.bat`
+  entirely.
 
-## Wie ein Update aussieht
+## What an update looks like
 
-1. Neue Version der Grammatik/Referenz/Jar aus `github.com/j-specman/specman`
-   beziehen (lokal z. B. unter `C:\Users\<user>\Desktop\specman-installation\` oder per
-   `git clone`/`git pull` auf `github.com/j-specman/specman`).
-2. `reference/SpecmanModel_V002.g4` durch die neue Version ersetzen und die neue
-   `specman-reference-vX.Y-model-v2.nsd` neben die vorhandenen Referenzen legen.
-3. `diff` gegen die vorherige Version laufen lassen — jede neue Grammatik-Produktion,
-   jedes neue optionale Attribut kann `scripts/lib/nsd-ast.mjs` betreffen (Parser **und**
-   Serializer, siehe deren Kommentare zu Produktions-Abdeckung). Insbesondere prüfen:
-   - Neue Schritt-Typen oder neue optionale Parameter je Schritt-Typ.
-   - Geänderte Lexer-Präzedenz (z. B. `STEP_ID` vs. `INT` vs. `STEP_NUM`).
-   - Geänderte Semantik von `change=`/`markups=` (Änderungsarten, erlaubte Konstruktionen).
-4. `node --test "test/**/*.test.mjs"` laufen lassen — insbesondere die
-   Rundtrip-Tests gegen die neue Referenzdatei (Parse → Serialize → erneut Parse).
-5. Betroffene Skripte/Skills anpassen, `plugin.json`-Version nach SemVer erhöhen, committen.
+1. Obtain the new version of the grammar/reference/jar from `github.com/j-specman/specman`
+   (locally e.g. under `C:\Users\<user>\Desktop\specman-installation\` or via
+   `git clone`/`git pull` on `github.com/j-specman/specman`).
+2. Replace `reference/SpecmanModel_V002.g4` with the new version and put the new
+   `specman-reference-vX.Y-model-v2.nsd` next to the existing references.
+3. Run `diff` against the previous version — every new grammar production and every new optional
+   attribute may affect `scripts/lib/nsd-ast.mjs` (parser **and** serializer; see their comments on
+   production coverage). In particular check:
+   - New step types or new optional parameters per step type.
+   - Changed lexer precedence (e.g. `STEP_ID` vs. `INT` vs. `STEP_NUM`).
+   - Changed semantics of `change=`/`markups=` (change kinds, allowed constructs).
+4. Run `node --test "test/**/*.test.mjs"` — in particular the round-trip tests against the new
+   reference file (parse → serialize → parse again).
+5. Adapt affected scripts/skills, bump the `plugin.json` version according to SemVer, commit.
 
-## Bekannte Eigenheiten des Formats (Stand 2026-09-16, siehe Skript-Kommentare für Details)
+## Known quirks of the format (as of 2026-09-16, see script comments for details)
 
-- `change=(added|removed|source|target, changeset[, sourceStep=<id>])` — kein „modified"; das
-  wurde 2021 im Specman-Code explizit entfernt (`Aenderungsart.Bearbeitet` gestrichen).
-- `source`/`target`-Verknüpfung (Schritt-Verschiebung mit Tracking) wird von Specman selbst nicht
-  validiert — ein falsches `sourceStep=` crasht die GUI beim Laden. Dieses Plugin erzeugt solche
-  Paare bewusst nicht selbst (siehe Plan-Dokument der ursprünglichen Implementierung).
-- Reale Bestandsspezifikationen liegen oft noch im alten V001-JSON-Format vor — die V2-Werkzeuge
-  dieses Plugins lehnen solche Dateien mit einer klaren Meldung ab, statt sie falsch zu
-  interpretieren.
+- `change=(added|removed|source|target, changeset[, sourceStep=<id>])` — no "modified"; that was
+  explicitly removed in the Specman code in 2021 (`Aenderungsart.Bearbeitet` deleted).
+- The `source`/`target` link (step move with tracking) is not validated by Specman itself — a wrong
+  `sourceStep=` crashes the GUI on load. This plugin deliberately does not produce such pairs itself
+  (see the plan document of the original implementation).
+- Real-world existing specifications are often still in the old V001 JSON format — this plugin's V2
+  tools reject such files with a clear message instead of misinterpreting them.

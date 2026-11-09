@@ -74,7 +74,7 @@ function freshStepId(ctx) {
 function consumeParagraph(ctx, p, path) {
   const uses = (ctx.consumed.get(p.id) ?? 0) + 1;
   ctx.consumed.set(p.id, uses);
-  if (uses === 2 && p.text.trim() !== '') ctx.warnings.push(`${path}: Absatz ${p.id} wird mehrfach verwendet.`);
+  if (uses === 2 && p.text.trim() !== '') ctx.warnings.push(`${path}: Paragraph ${p.id} is used more than once.`);
 }
 
 function imageScale(image) {
@@ -84,10 +84,10 @@ function imageScale(image) {
 
 function imageArea(ctx, imageId, overrides, path) {
   const image = ctx.byId.get(imageId);
-  if (!image || image.type !== 'image') fail(path, `unbekanntes Bild '${imageId}'.`);
+  if (!image || image.type !== 'image') fail(path, `unknown image '${imageId}'.`);
   const file = overrides?.pngFile ?? image.file;
-  if (!file) fail(path, `Bild ${imageId} hat keine extrahierte Datei (docx-extract mit --out-dir ausführen).`);
-  if (!overrides?.pngFile && image.ext !== 'png') fail(path, `Bild ${imageId} ist '${image.ext}', nicht PNG — nach PNG konvertieren und 'pngFile' angeben.`);
+  if (!file) fail(path, `Image ${imageId} has no extracted file (run docx-extract with --out-dir).`);
+  if (!overrides?.pngFile && image.ext !== 'png') fail(path, `Image ${imageId} is '${image.ext}', not PNG — convert it to PNG and set 'pngFile'.`);
   ctx.consumedImages.add(imageId);
   ctx.counts.images++;
   return { kind: 'image', png: readFileSync(file), scalePercent: overrides?.scale ?? imageScale(image) };
@@ -106,7 +106,7 @@ function buildListSpec(ctx, entries, path) {
     }
     return { html, tail: [] };
   });
-  if (flattened) ctx.warnings.push(`${path}: verschachtelte Listenebenen wurden eingerückt in eine flache Liste überführt (Specman unterstützt keine verschachtelten Listen).`);
+  if (flattened) ctx.warnings.push(`${path}: nested list levels were indented into a flat list (Specman does not support nested lists).`);
   return { kind: 'list', ordered: entries[0].ordered, items };
 }
 
@@ -130,7 +130,7 @@ function tableSpec(ctx, table, path) {
     return cells;
   });
   if (flattened) {
-    ctx.warnings.push(`${path}: Tabelle ${table.id} enthält verbundene Zellen — im Zielmodell aufgelöst (Inhalt steht in der ersten Zelle, übrige bleiben leer).`);
+    ctx.warnings.push(`${path}: Table ${table.id} contains merged cells — resolved in the target model (content stays in the first cell, the others are left empty).`);
   }
   return { kind: 'table', rows };
 }
@@ -138,7 +138,7 @@ function tableSpec(ctx, table, path) {
 /** Converts extract blocks into `{ html, tail }` — the head text plus any following areas. */
 function blocksToContent(ctx, blocks, path, label, { flatLists = false } = {}) {
   if (label !== undefined && FORBIDDEN_LABEL_RE.test(String(label).trim())) {
-    fail(path, `'label' darf nicht '${label}' sein — Schritttexte stehen ohne Präfix 'System:'/'User:' (der Handelnde steht im Satz).`);
+    fail(path, `'label' must not be '${label}' — step texts carry no 'System:'/'User:' prefix (the actor is named in the sentence).`);
   }
   const chunks = [];
   const pushText = (runs) => {
@@ -193,14 +193,14 @@ function blocksToContent(ctx, blocks, path, label, { flatLists = false } = {}) {
 
 function idsOf(ref, path) {
   const ids = Array.isArray(ref) ? ref : [ref];
-  if (ids.length === 0 || ids.some((id) => typeof id !== 'string')) fail(path, "'ref' braucht eine Id oder eine Liste von Ids.");
+  if (ids.length === 0 || ids.some((id) => typeof id !== 'string')) fail(path, "'ref' needs an id or a list of ids.");
   return ids;
 }
 
 function refBlocks(ctx, ref, path) {
   return idsOf(ref, path).map((id) => {
     const block = ctx.byId.get(id);
-    if (!block) fail(path, `unbekannte Extract-Id '${id}'.`);
+    if (!block) fail(path, `unknown extract id '${id}'.`);
     return block;
   });
 }
@@ -211,19 +211,19 @@ function refBlocks(ctx, ref, path) {
  */
 function resolveContent(ctx, spec, path, options) {
   if (typeof spec === 'string') return { html: escapeText(spec), tail: [] };
-  if (spec === null || typeof spec !== 'object') fail(path, 'Inhalt muss ein String oder ein Objekt sein.');
+  if (spec === null || typeof spec !== 'object') fail(path, 'Content must be a string or an object.');
   if (spec.ref !== undefined) {
     const flatLists = options?.flatLists === true || spec.flatLists === true;
     return blocksToContent(ctx, refBlocks(ctx, spec.ref, path), path, spec.label, { ...options, flatLists });
   }
   if (typeof spec.html === 'string') { assertNoBacktick(spec.html, path); return { html: spec.html, tail: [] }; }
   if (typeof spec.text === 'string') return { html: escapeText(spec.text), tail: [] };
-  return fail(path, "Inhalt braucht 'ref', 'html' oder 'text'.");
+  return fail(path, "Content needs 'ref', 'html' or 'text'.");
 }
 
 function resolveHead(ctx, spec, path) {
   const content = resolveContent(ctx, spec, path, { flatLists: true });
-  if (content.tail.length > 0) fail(path, 'Dieser Inhalt darf nur Text sein (Liste/Tabelle/Bild hier nicht möglich) — als `areas` des Schritts angeben.');
+  if (content.tail.length > 0) fail(path, 'This content must be plain text (list/table/image not possible here) — specify it as `areas` of the step.');
   return content.html;
 }
 
@@ -245,7 +245,7 @@ function resolveAreas(ctx, areas, path) {
     } else if (area.kind === 'table') {
       out.push({ kind: 'table', widthPercent: area.widthPercent, cols: area.cols, rows: area.rows.map((row, r) => row.map((cell, c) => itemContent(ctx, cell, `${here}.rows[${r}][${c}]`))) });
     } else {
-      fail(here, `unbekannte Area-Art '${area.kind}' (erwartet text|list|table|image|refs).`);
+      fail(here, `unknown area kind '${area.kind}' (expected text|list|table|image|refs).`);
     }
   });
   ctx.counts.areas += out.length;
@@ -274,12 +274,12 @@ function nextNum(counter) {
 }
 
 function buildSteps(ctx, nodes, counter, path) {
-  if (!Array.isArray(nodes) || nodes.length === 0) fail(path, 'braucht mindestens einen Schritt.');
+  if (!Array.isArray(nodes) || nodes.length === 0) fail(path, 'needs at least one step.');
   return nodes.map((node, i) => buildNode(ctx, node, counter, `${path}[${i}]`));
 }
 
 function buildBranch(ctx, branch, defaultHead, counter, path) {
-  if (!branch) fail(path, 'Zweig fehlt.');
+  if (!branch) fail(path, 'branch is missing.');
   let headHtml;
   if (branch.head === undefined) { headHtml = escapeText(defaultHead); ctx.counts.defaultedBranchHeads++; }
   else headHtml = resolveHead(ctx, branch.head, `${path}.head`);
@@ -307,10 +307,10 @@ function buildCatchArea(ctx, catches, bodySteps, counter, path) {
   const blocks = catches.map((c, n) => {
     const here = `${path}.catches[${n}]`;
     const ids = c.breakIds ?? (c.breakId !== undefined ? [c.breakId] : []);
-    if (ids.length === 0) fail(here, "braucht 'breakId' (oder 'breakIds').");
+    if (ids.length === 0) fail(here, "needs 'breakId' (or 'breakIds').");
     for (const id of ids) {
-      if (!ctx.breakNums.has(id)) fail(here, `unbekannter Abbruch-Schritt '${id}' (muss als kind:"break" mit id im Plan stehen).`);
-      if (!containsBreak(bodySteps, id, ctx)) fail(here, `Abbruch-Schritt '${id}' liegt nicht innerhalb dieses Containers.`);
+      if (!ctx.breakNums.has(id)) fail(here, `unknown break step '${id}' (must exist in the plan as kind:"break" with an id).`);
+      if (!containsBreak(bodySteps, id, ctx)) fail(here, `break step '${id}' is not inside this container.`);
     }
     const headHtml = resolveHead(ctx, c.content, `${here}.content`);
     const body = buildSteps(ctx, c.body, counter, `${here}.body`);
@@ -330,7 +330,7 @@ function buildCatchArea(ctx, catches, bodySteps, counter, path) {
 function buildNode(ctx, node, counter, path) {
   const kind = node.kind;
   const isLeaf = LEAF_KINDS.has(kind);
-  if (!isLeaf && !STRUCTURED_KINDS.has(kind)) fail(path, `unbekannte Schrittart '${kind}'.`);
+  if (!isLeaf && !STRUCTURED_KINDS.has(kind)) fail(path, `unknown step kind '${kind}'.`);
 
   const stepNum = nextNum(counter);
   ctx.usedStepNums.add(stepNum);
@@ -348,14 +348,14 @@ function buildNode(ctx, node, counter, path) {
   if (kind === 'break') {
     ctx.counts.breaks++;
     if (node.id !== undefined) {
-      if (ctx.breakNums.has(node.id)) fail(path, `Break-Id '${node.id}' ist doppelt vergeben.`);
+      if (ctx.breakNums.has(node.id)) fail(path, `break id '${node.id}' is assigned twice.`);
       ctx.breakNums.set(node.id, stepNum);
     }
   }
 
   const head = resolveContent(ctx, node.content, `${path}.content`);
   if (isLeaf && head.html === '' && head.tail.length > 0) {
-    ctx.warnings.push(`${path}: Schritt ${stepNum} hat einen leeren Schritttext, der Inhalt steht nur in Bereichen (Liste/Tabelle/Bild) — bei einem Aufzählungspunkt, der ein eigener Schritt ist, 'flatLists: true' am ref setzen.`);
+    ctx.warnings.push(`${path}: step ${stepNum} has an empty step text and its content sits only in areas (list/table/image) — for a bullet that is a step of its own, set 'flatLists: true' on the ref.`);
   }
   const extra = resolveAreas(ctx, node.areas, path);
   step.content = contentOf(ctx, head, extra);
@@ -371,7 +371,7 @@ function buildNode(ctx, node, counter, path) {
     step.ifBranch = buildBranch(ctx, node.ifBranch, 'Ja', childCounter, `${path}.ifBranch`);
     step.elseBranch = buildBranch(ctx, node.elseBranch, 'Nein', childCounter, `${path}.elseBranch`);
   } else if (kind === 'case') {
-    if (!Array.isArray(node.caseBranches) || node.caseBranches.length < 2) fail(path, "'case' braucht mindestens 2 caseBranches neben dem defaultBranch.");
+    if (!Array.isArray(node.caseBranches) || node.caseBranches.length < 2) fail(path, "'case' needs at least 2 caseBranches besides the defaultBranch.");
     step.defaultBranch = buildBranch(ctx, node.defaultBranch, 'Sonst', childCounter, `${path}.defaultBranch`);
     step.caseBranches = node.caseBranches.map((b, n) => buildBranch(ctx, b, `Fall ${n + 1}`, childCounter, `${path}.caseBranches[${n}]`));
   }
@@ -383,7 +383,7 @@ function buildNode(ctx, node, counter, path) {
 // ============================================================
 
 function replaceRequired(html, pattern, replacement, what) {
-  if (!pattern.test(html)) fail('Vorlage', `${what} nicht gefunden — passt reference/suc-template.nsd noch zu diesem Skript?`);
+  if (!pattern.test(html)) fail('template', `${what} not found — does reference/suc-template.nsd still match this script?`);
   return html.replace(pattern, replacement);
 }
 
@@ -401,7 +401,7 @@ function descriptionHtml(ctx, intro, path) {
   const parts = [];
   for (const [i, spec] of (intro.description ?? []).entries()) {
     const content = resolveContent(ctx, spec, `${path}.description[${i}]`);
-    if (content.tail.length > 0) fail(`${path}.description[${i}]`, 'Liste/Tabelle/Bild ist in der Beschreibung nicht möglich — als Vorbedingungs-Item mit `areas` oder als Schritt abbilden.');
+    if (content.tail.length > 0) fail(`${path}.description[${i}]`, 'List/table/image is not possible in the description — model it as a precondition item with `areas` or as a step.');
     parts.push(content.html);
   }
   if (intro.actors) {
@@ -419,18 +419,18 @@ function fillIntro(ctx, ast, plan) {
 
   const tail = ast.intro.tail;
   const descIdx = tail.findIndex((a) => a.kind === 'text' && /Beschreibung/.test(a.content.html));
-  if (descIdx === -1) fail('Vorlage', 'Beschreibungs-Textbereich nicht gefunden.');
+  if (descIdx === -1) fail('template', 'description text area not found.');
   const resultIdx = tail.findIndex((a) => a.kind === 'text' && /Resultat/.test(a.content.html));
   const listAfter = (idx) => tail.findIndex((a, i) => i > idx && a.kind === 'list');
   const preIdx = listAfter(descIdx);
   const postIdx = listAfter(resultIdx);
-  if (resultIdx === -1 || preIdx === -1 || postIdx === -1) fail('Vorlage', 'Vorbedingungs-/Nachbedingungs-Liste nicht gefunden.');
+  if (resultIdx === -1 || preIdx === -1 || postIdx === -1) fail('template', 'precondition/postcondition list not found.');
 
   const descParts = descriptionHtml(ctx, intro, 'intro');
   if (descParts.length > 0) {
     const area = tail[descIdx].content;
     const m = /^([\s\S]*?<\/h2>)\s*<div[\s\S]*?<\/div>\s*(<h2[\s\S]*)$/.exec(area.html);
-    if (!m) fail('Vorlage', 'Struktur des Beschreibungs-Textbereichs nicht erkannt.');
+    if (!m) fail('template', 'structure of the description text area not recognised.');
     resetHtml(area, `${m[1]}\n${divs(descParts)}\n${m[2]}`);
   }
 
@@ -447,7 +447,7 @@ function fillIntro(ctx, ast, plan) {
 
 function fillOutro(ctx, ast, plan) {
   const outro = plan.outro ?? {};
-  if (!ast.outro) fail('Vorlage', 'kein outro-Block.');
+  if (!ast.outro) fail('template', 'no outro block.');
 
   const fillSlots = (content, slotContents, what) => {
     const specs = slotContents.filter(([, list]) => list && list.length > 0);
@@ -458,7 +458,7 @@ function fillOutro(ctx, ast, plan) {
       const found = specs.find(([slot]) => slot === seen);
       return found ? divs(found[1].map((spec, i) => {
         const c = resolveContent(ctx, spec, `outro.${what}[${i}]`);
-        if (c.tail.length > 0) fail(`outro.${what}[${i}]`, 'Liste/Tabelle/Bild ist hier nicht möglich — als `sections[].areas` angeben.');
+        if (c.tail.length > 0) fail(`outro.${what}[${i}]`, 'List/table/image is not possible here — specify it as `sections[].areas`.');
         return c.html;
       })) : whole;
     });
@@ -470,19 +470,19 @@ function fillOutro(ctx, ast, plan) {
   const tail = ast.outro.tail;
   if (outro.openPoints && outro.openPoints.length > 0) {
     const table = tail.find((a) => a.kind === 'table' && a.rows[0]?.cells.length === 3);
-    if (!table) fail('Vorlage', 'Offene-Punkte-Tabelle nicht gefunden.');
+    if (!table) fail('template', 'open-points table not found.');
     table.rows.splice(1, table.rows.length - 1, ...outro.openPoints.map((row, r) => {
-      if (row.length !== 3) fail(`outro.openPoints[${r}]`, 'erwartet [Issue, Prio, Status].');
+      if (row.length !== 3) fail(`outro.openPoints[${r}]`, 'expected [issue, priority, status].');
       return { cells: row.map((cell, c) => ({ content: contentOf(ctx, itemContent(ctx, cell, `outro.openPoints[${r}][${c}]`), []) })) };
     }));
   }
   const notes = tail.find((a) => a.kind === 'text' && /Bemerkungen/.test(a.content.html));
   if (notes) fillSlots(notes.content, [[1, outro.remarks], [2, outro.designNotes]], 'remarks/designNotes');
-  else if ((outro.remarks?.length ?? 0) + (outro.designNotes?.length ?? 0) > 0) fail('Vorlage', 'Bemerkungen-Textbereich nicht gefunden.');
+  else if ((outro.remarks?.length ?? 0) + (outro.designNotes?.length ?? 0) > 0) fail('template', 'remarks text area not found.');
 
   (outro.sections ?? []).forEach((section, n) => {
     const here = `outro.sections[${n}]`;
-    if (typeof section.heading !== 'string' || section.heading === '') fail(here, "braucht 'heading'.");
+    if (typeof section.heading !== 'string' || section.heading === '') fail(here, "needs 'heading'.");
     tail.push(buildArea({ kind: 'text', html: `<h2>${escapeText(section.heading)}</h2>` }));
     for (const spec of resolveAreas(ctx, section.areas, here)) tail.push(buildArea(spec));
   });
@@ -496,19 +496,19 @@ function expandIgnored(ctx, ignored, field = 'ignored') {
   const out = new Map();
   (ignored ?? []).forEach((entry, n) => {
     const here = `${field}[${n}]`;
-    if (typeof entry.reason !== 'string' || entry.reason.trim() === '') fail(here, "braucht eine nicht-leere 'reason'.");
+    if (typeof entry.reason !== 'string' || entry.reason.trim() === '') fail(here, "needs a non-empty 'reason'.");
     const ids = [...(entry.ids ?? [])];
     if (entry.from !== undefined || entry.to !== undefined) {
       const num = (id) => Number(/^[pi](\d+)$/.exec(id ?? '')?.[1]);
       const prefix = String(entry.from)[0];
       const [from, to] = [num(entry.from), num(entry.to)];
-      if (!(from <= to)) fail(here, "'from'/'to' müssen Ids derselben Art (p<N> oder i<N>) mit from <= to sein.");
+      if (!(from <= to)) fail(here, "'from'/'to' must be ids of the same kind (p<N> or i<N>) with from <= to.");
       for (let k = from; k <= to; k++) ids.push(`${prefix}${k}`);
     }
-    if (ids.length === 0) fail(here, "braucht 'ids' oder 'from'/'to'.");
+    if (ids.length === 0) fail(here, "needs 'ids' or 'from'/'to'.");
     for (const id of ids) {
       const block = ctx.byId.get(id);
-      if (!block) fail(here, `unbekannte Extract-Id '${id}'.`);
+      if (!block) fail(here, `unknown extract id '${id}'.`);
       out.set(id, entry.reason);
       if (block.type === 'table') {
         for (const p of collectParagraphs(block)) {
@@ -532,7 +532,7 @@ function checkCoverage(ctx, ignoredMap) {
     unreferenced.push({ id: p.id, text: p.text.slice(0, 120) });
   }
   for (const image of ctx.extract.images) {
-    if (!ctx.consumedImages.has(image.id) && !ignoredMap.has(image.id)) unreferenced.push({ id: image.id, text: '(Bild)' });
+    if (!ctx.consumedImages.has(image.id) && !ignoredMap.has(image.id)) unreferenced.push({ id: image.id, text: '(image)' });
   }
   return unreferenced;
 }
@@ -547,7 +547,7 @@ export function ignoredIds(extract, ignored) {
 
 function assertDisjoint(rewordedMap, ignoredMap) {
   for (const id of rewordedMap.keys()) {
-    if (ignoredMap.has(id)) fail('reworded', `Id '${id}' steht auch in 'ignored' — umformulierte Inhalte nicht zusätzlich ignorieren.`);
+    if (ignoredMap.has(id)) fail('reworded', `id '${id}' is also in 'ignored' — do not additionally ignore reworded content.`);
   }
 }
 
@@ -582,11 +582,11 @@ function groupByReason(ctx, map) {
 
 export function buildFromPlan({ templateText, plan, extract }) {
   try {
-    if (!plan || typeof plan !== 'object') fail('plan', 'fehlt oder ist kein Objekt.');
+    if (!plan || typeof plan !== 'object') fail('plan', 'is missing or not an object.');
     for (const key of ['number', 'title']) {
-      if (typeof plan[key] !== 'string' || plan[key].trim() === '') fail('plan', `'${key}' ist Pflicht.`);
+      if (typeof plan[key] !== 'string' || plan[key].trim() === '') fail('plan', `'${key}' is required.`);
     }
-    if (!plan.main?.steps) fail('plan', "'main.steps' ist Pflicht.");
+    if (!plan.main?.steps) fail('plan', "'main.steps' is required.");
 
     const ctx = createContext(extract);
     const ast = parseDiagram(templateText);
@@ -608,13 +608,13 @@ export function buildFromPlan({ templateText, plan, extract }) {
     else if ((plan.history === undefined || plan.history === 'extract') && extract.history) {
       historyRows = extract.history.rows;
       for (const id of extract.history.paragraphIds) ctx.consumed.set(id, 1);
-    } else if (plan.history === 'extract') fail('plan.history', "'extract' angegeben, aber das docx enthält keine erkennbare Historientabelle.");
+    } else if (plan.history === 'extract') fail('plan.history', "'extract' was given, but the docx contains no recognisable history table.");
 
     const unreferenced = checkCoverage(ctx, new Map([...rewordedMap, ...ignoredMap]));
     if (unreferenced.length > 0) {
       return {
         ok: false,
-        error: `${unreferenced.length} Inhalt(e) des docx kommen im Plan nicht vor (weder verwendet noch in 'ignored' begründet) — es darf keine Logik verloren gehen:\n` +
+        error: `${unreferenced.length} docx content item(s) do not appear in the plan (neither used nor justified in 'ignored') — no logic may be lost:\n` +
           unreferenced.map((u) => `  ${u.id}: ${u.text}`).join('\n'),
         unreferenced,
       };

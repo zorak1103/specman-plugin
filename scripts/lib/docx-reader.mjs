@@ -25,15 +25,15 @@ export function readZip(buf) {
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
   }
-  if (eocd < 0) throw new Error('docx: kein gültiges ZIP (End-of-Central-Directory nicht gefunden).');
+  if (eocd < 0) throw new Error('docx: not a valid ZIP (end of central directory not found).');
   const count = buf.readUInt16LE(eocd + 10);
   const cdOffset = buf.readUInt32LE(eocd + 16);
-  if (count === 0xffff || cdOffset === 0xffffffff) throw new Error('docx: ZIP64 wird nicht unterstützt.');
+  if (count === 0xffff || cdOffset === 0xffffffff) throw new Error('docx: ZIP64 is not supported.');
 
   const entries = new Map();
   let p = cdOffset;
   for (let n = 0; n < count; n++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('docx: Central-Directory beschädigt.');
+    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('docx: central directory is corrupt.');
     const method = buf.readUInt16LE(p + 10);
     const compSize = buf.readUInt32LE(p + 20);
     const nameLen = buf.readUInt16LE(p + 28);
@@ -50,12 +50,12 @@ export function readZip(buf) {
     get(name) {
       const e = entries.get(name);
       if (!e) return undefined;
-      if (buf.readUInt32LE(e.offset) !== 0x04034b50) throw new Error(`docx: lokaler Header von '${name}' beschädigt.`);
+      if (buf.readUInt32LE(e.offset) !== 0x04034b50) throw new Error(`docx: local header of '${name}' is corrupt.`);
       const start = e.offset + 30 + buf.readUInt16LE(e.offset + 26) + buf.readUInt16LE(e.offset + 28);
       const raw = buf.subarray(start, start + e.compSize);
       if (e.method === 0) return Buffer.from(raw);
       if (e.method === 8) return inflateRawSync(raw, { maxOutputLength: MAX_INFLATED_BYTES });
-      throw new Error(`docx: Kompressionsmethode ${e.method} von '${name}' wird nicht unterstützt.`);
+      throw new Error(`docx: compression method ${e.method} of '${name}' is not supported.`);
     },
   };
 }
@@ -88,7 +88,7 @@ export function parseXml(xml) {
     const top = stack[stack.length - 1];
     if (m[1] !== undefined) { top.children.push({ text: m[1] }); continue; }
     if (m[2] !== undefined) {
-      if (stack.length === 1 || top.name !== m[2]) throw new Error(`xml: unerwartetes End-Tag </${m[2]}>`);
+      if (stack.length === 1 || top.name !== m[2]) throw new Error(`xml: unexpected end tag </${m[2]}>`);
       stack.pop();
       continue;
     }
@@ -104,7 +104,7 @@ export function parseXml(xml) {
     }
     if (m[6] !== undefined) top.children.push({ text: decodeEntities(m[6]) });
   }
-  if (stack.length !== 1) throw new Error(`xml: Element <${stack[stack.length - 1].name}> nicht geschlossen.`);
+  if (stack.length !== 1) throw new Error(`xml: element <${stack[stack.length - 1].name}> not closed.`);
   return root.children.find((c) => c.name);
 }
 
@@ -173,7 +173,7 @@ function mediaExtension(target) {
  */
 export function extractDocx(buffer, { imageSink } = {}) {
   const zip = readZip(buffer);
-  if (!zip.has('word/document.xml')) throw new Error("docx: 'word/document.xml' fehlt.");
+  if (!zip.has('word/document.xml')) throw new Error("docx: 'word/document.xml' is missing.");
   const doc = parseXml(zip.get('word/document.xml').toString('utf8'));
   const rels = readRelationships(zip);
   const isOrdered = readNumbering(zip);
@@ -196,11 +196,11 @@ export function extractDocx(buffer, { imageSink } = {}) {
     }
     const bytes = target && zip.get(`word/${target}`.replace(/\/\.\//g, '/'));
     if (!bytes) {
-      ctx.warnings.add(`Bild ${id}: Datei zu Relationship '${relId}' nicht im Archiv gefunden.`);
+      ctx.warnings.add(`Image ${id}: file for relationship '${relId}' not found in the archive.`);
     } else {
       image.bytes = bytes.length;
       if (imageSink) image.file = imageSink(`${id}.${image.ext || 'bin'}`, bytes);
-      if (image.ext !== 'png') ctx.warnings.add(`Bild ${id} ist '${image.ext}', nicht PNG — vor dem Einfügen nach PNG konvertieren.`);
+      if (image.ext !== 'png') ctx.warnings.add(`Image ${id} is '${image.ext}', not PNG — convert it to PNG before inserting.`);
     }
     ctx.images.push(image);
     ctx.stats.images++;
@@ -228,16 +228,16 @@ export function extractDocx(buffer, { imageSink } = {}) {
         else if (c.name === 'w:noBreakHyphen') push('-');
         else if (c.name === 'w:commentReference') ctx.stats.comments++;
         else if (c.name === 'w:footnoteReference' || c.name === 'w:endnoteReference') {
-          ctx.warnings.add('Fuß-/Endnoten vorhanden — ihr Text wird nicht extrahiert und muss manuell geprüft werden.');
+          ctx.warnings.add('Footnotes/endnotes present — their text is not extracted and must be checked manually.');
         } else if (c.name === 'w:object') {
-          ctx.warnings.add('Eingebettetes OLE-Objekt vorhanden — nicht migrierbar, manuell prüfen.');
+          ctx.warnings.add('Embedded OLE object present — cannot be migrated, check manually.');
         } else if (c.name === 'w:drawing') {
           const blips = [...descendants(c)].filter((d) => d.name === 'a:blip');
           const extent = [...descendants(c)].find((d) => d.name === 'wp:extent');
           for (const blip of blips) imageIds.push(parseImage(blip, extent));
           const box = [...descendants(c)].find((d) => d.name === 'w:txbxContent');
           if (box) {
-            ctx.warnings.add('Textfeld vorhanden — sein Text wurde in den umgebenden Absatz übernommen.');
+            ctx.warnings.add('Text box present — its text was merged into the surrounding paragraph.');
             push(textOf(box));
           }
         } else if (c.name === 'w:pict') {
@@ -348,7 +348,8 @@ function findHistory(blocks) {
   for (const block of blocks) {
     if (block.type !== 'table' || block.rows.length === 0) continue;
     const header = block.rows[0].cells.map(cellText).join('|');
-    if (!(/Aktivit/.test(header) && /Autor/.test(header) && /Datum/.test(header))) continue;
+    // History-table header: English (Activity/Author/Date) or German (Aktivität/Autor/Datum).
+    if (!(/Activity|Aktivit/i.test(header) && /Author|Autor/i.test(header) && /Date|Datum/i.test(header))) continue;
     const columnCount = block.rows[0].cells.length;
     const rows = block.rows.slice(1).map((row) => {
       const cells = row.cells.map(cellText);
@@ -368,16 +369,16 @@ export function renderOutline(blocks, indent = '') {
     if (b.type === 'p') {
       const flags = [b.style ?? '-'];
       if (b.list) flags.push(`${b.list.ordered ? 'nr' : 'bullet'}${b.list.level}`);
-      const images = b.images.length ? ` {Bild ${b.images.join(',')}}` : '';
+      const images = b.images.length ? ` {image ${b.images.join(',')}}` : '';
       lines.push(`${indent}${b.id} [${flags.join(' ')}] ${b.text.replace(/\n/g, ' ⏎ ')}${images}`);
     } else {
-      lines.push(`${indent}${b.id} TABLE (${b.rows.length} Zeilen)`);
+      lines.push(`${indent}${b.id} TABLE (${b.rows.length} rows)`);
       b.rows.forEach((row, r) => {
-        lines.push(`${indent}  Zeile ${r + 1}`);
+        lines.push(`${indent}  Row ${r + 1}`);
         row.cells.forEach((cell, c) => {
           const span = cell.gridSpan > 1 ? ` span=${cell.gridSpan}` : '';
           const merge = cell.vMerge ? ` vMerge=${cell.vMerge}` : '';
-          lines.push(`${indent}    Zelle ${c + 1}${span}${merge}`);
+          lines.push(`${indent}    Cell ${c + 1}${span}${merge}`);
           lines.push(...renderOutline(cell.blocks, `${indent}      `));
         });
       });

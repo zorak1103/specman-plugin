@@ -22,8 +22,8 @@ import { collectStepIds, collectStepNums, makePlaceholderStep } from './lib/nsd-
 import { escapeText } from './lib/nsd-html.mjs';
 
 function headHtmlFrom({ head, headHtml }) {
-  if (head === undefined && headHtml === undefined) throw new Error('nsd-catch: --head oder --head-html ist Pflicht.');
-  if (head !== undefined && headHtml !== undefined) throw new Error('nsd-catch: --head und --head-html schließen sich aus.');
+  if (head === undefined && headHtml === undefined) throw new Error('nsd-catch: --head or --head-html is required.');
+  if (head !== undefined && headHtml !== undefined) throw new Error('nsd-catch: --head and --head-html are mutually exclusive.');
   if (headHtml !== undefined) { assertValidHtml(headHtml); return headHtml; }
   return escapeText(head);
 }
@@ -39,8 +39,8 @@ function findCatch(ast, breakStepNum) {
 
 function requireBreak(ast, breakId) {
   const found = findStep(ast, { stepId: breakId });
-  if (!found) throw new Error(`Schritt nicht gefunden: ${breakId}`);
-  if (found.step.kind !== 'break') throw new Error(`nsd-catch: '${breakId}' ist kein break-Schritt.`);
+  if (!found) throw new Error(`Step not found: ${breakId}`);
+  if (found.step.kind !== 'break') throw new Error(`nsd-catch: '${breakId}' is not a break step.`);
   return found.step;
 }
 
@@ -48,7 +48,7 @@ function addCatch(ast, { breakId, parentKey, ...heads }) {
   const breakStep = requireBreak(ast, breakId);
   const html = headHtmlFrom(heads);
   if (findCatch(ast, breakStep.stepNum)) {
-    throw new Error(`nsd-catch: für den break-Schritt '${breakId}' existiert bereits ein catch-Block.`);
+    throw new Error(`nsd-catch: a catch block already exists for break step '${breakId}'.`);
   }
   const target = catchTargetFor(ast, breakId, parentKey);
   const placeholderStepIds = [];
@@ -71,7 +71,7 @@ function setHead(ast, { breakId, ...heads }) {
   const breakStep = requireBreak(ast, breakId);
   const html = headHtmlFrom(heads);
   const found = findCatch(ast, breakStep.stepNum);
-  if (!found) throw new Error(`nsd-catch: für den break-Schritt '${breakId}' gibt es keinen catch-Block.`);
+  if (!found) throw new Error(`nsd-catch: there is no catch block for break step '${breakId}'.`);
   found.block.content.head = { html, plain: undefined, markups: [] };
   return { ok: true };
 }
@@ -79,7 +79,7 @@ function setHead(ast, { breakId, ...heads }) {
 function removeCatch(ast, { breakId }) {
   const breakStep = requireBreak(ast, breakId);
   const found = findCatch(ast, breakStep.stepNum);
-  if (!found) throw new Error(`nsd-catch: für den break-Schritt '${breakId}' gibt es keinen catch-Block.`);
+  if (!found) throw new Error(`nsd-catch: there is no catch block for break step '${breakId}'.`);
   const area = found.holder.catchArea;
   area.catches.splice(found.index, 1);
   if (area.catches.length === 0) found.holder.catchArea = undefined;
@@ -90,7 +90,7 @@ const OPS = { add: addCatch, 'set-head': setHead, remove: removeCatch };
 
 export function applyCatch(text, opts) {
   const op = OPS[opts.op];
-  if (!op) return { ok: false, error: `nsd-catch: unbekannte --op '${opts.op}' (erwartet: ${Object.keys(OPS).join(', ')}).` };
+  if (!op) return { ok: false, error: `nsd-catch: unknown --op '${opts.op}' (expected: ${Object.keys(OPS).join(', ')}).` };
   let ast;
   try {
     ast = parseDiagram(text);
@@ -109,13 +109,13 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
   for (const required of ['file', 'op', 'break']) {
-    if (args[required] === undefined) { report({ ok: false, error: `--${required} ist Pflicht.` }, { json }); return; }
+    if (args[required] === undefined) { report({ ok: false, error: `--${required} is required.` }, { json }); return; }
   }
   let text;
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json });
     return;
   }
   const result = applyCatch(text, {
@@ -126,7 +126,7 @@ function main() {
   report(result.ok ? rest : result, {
     json,
     plainText: (r) => (r.placeholderStepIds?.length
-      ? `catch angelegt, bodyKey: ${r.bodyKey}, Platzhalter (bitte sofort befüllen): ${r.placeholderStepIds.join(', ')}`
+      ? `catch created, bodyKey: ${r.bodyKey}, placeholders (fill in immediately): ${r.placeholderStepIds.join(', ')}`
       : 'geschrieben.'),
   });
 }

@@ -1,31 +1,39 @@
 #!/usr/bin/env node
-// nsd-history.mjs — reads and maintains the "Dokumentenhistorie / UC-Lifecycle" table inside a
-// diagram's `intro` block (columns: Version | Aktivität | Autor | Datum | Folgeaktion/Ergebnis).
+// nsd-history.mjs — reads and maintains the "document history / UC lifecycle" table inside a
+// diagram's `intro` block (columns: Version | Activity | Author | Date | Follow-up/result; the German
+// template spells them Version | Aktivität | Autor | Datum | Folgeaktion).
 // This table lives outside any step, so none of the step-addressing scripts
 // (nsd-locate/nsd-set-text/nsd-insert-step) can reach it — this script is the only way in.
 //
 // The table is located by content, not by a fixed index: the first `table` area in `intro.tail`
-// whose header row mentions Aktivität/Autor/Datum. A miss is a hard error rather than a guess —
-// writing into the wrong table (e.g. outro's Issue/Prio/Status table) would silently corrupt it.
+// whose header row mentions Activity/Author/Date (or the German Aktivität/Autor/Datum). A miss is a
+// hard error rather than a guess — writing into the wrong table (e.g. outro's Issue/Prio/Status
+// table) would silently corrupt it.
 //
 // New cell text is escaped by this script itself (plain text in, Specman-style HTML out) — unlike
 // nsd-set-text.mjs, whose callers already hand it prepared HTML. `plain=` is never written (the
 // sanitizer regenerates it), consistent with nsd-set-text.mjs.
 //
-// No change tracking: the grammar (SpecmanModel_V002.g4, tableRow/tableCell) has no changeParam at
-// row or cell level, so a history row cannot be marked added/removed like a step can.
+// No change tracking: although Specman 1.4 allows change= on a table cell, a history row is never
+// marked added/removed here — the table is the change log itself.
 //
 // Usage:
 //   node nsd-history.mjs --file <path> --mode read --json
-//   node nsd-history.mjs --file <path> --mode fill-initial --author <name> [--date <TT.MM.JJJJ>] [--followup <-|Review>] --json
-//   node nsd-history.mjs --file <path> --mode append --version <v> --activity <text> --author <name> --followup <-|Review> [--date <TT.MM.JJJJ>] --json
+//   node nsd-history.mjs --file <path> --mode fill-initial --author <name> [--date <DD.MM.YYYY>] [--followup <-|Review>] --json
+//   node nsd-history.mjs --file <path> --mode append --version <v> --activity <text> --author <name> --followup <-|Review> [--date <DD.MM.YYYY>] --json
 //   node nsd-history.mjs --file <path> --mode import --rows-file <json> --json   (replaces all data rows; JSON = [[version, activity, author, date, followup], ...])
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isMainModule, report, parseArgs } from './lib/cli.mjs';
 import { parseDiagram, serializeDiagram } from './lib/nsd-ast.mjs';
 
-const HEADER_MARKERS = ['Aktivität', 'Autor', 'Datum'];
+// One entry per required header column; a column matches if it contains any alternative
+// (case-insensitive): English first, then the German used by the vendored SUC template.
+const HEADER_MARKERS = [
+  ['activity', 'aktivität'],
+  ['author', 'autor'],
+  ['date', 'datum'],
+];
 
 function stripTags(html) {
   return html
@@ -47,7 +55,8 @@ function findHistoryTable(ast) {
   for (const area of ast.intro.tail) {
     if (area.kind !== 'table' || area.rows.length === 0) continue;
     const headerTexts = area.rows[0].cells.map(cellText);
-    if (HEADER_MARKERS.every((marker) => headerTexts.some((t) => t.includes(marker)))) {
+    const lowered = headerTexts.map((t) => t.toLowerCase());
+    if (HEADER_MARKERS.every((alts) => lowered.some((t) => alts.some((a) => t.includes(a))))) {
       return { area, headerTexts };
     }
   }
@@ -63,7 +72,7 @@ function escapeCellText(text) {
 
 function makeCell(text) {
   if (String(text).includes('`')) {
-    throw new Error(`nsd-history: Zellinhalt darf keinen Backtick enthalten: '${text}'`);
+    throw new Error(`nsd-history: cell content must not contain a backtick: '${text}'`);
   }
   return { content: { head: { html: escapeCellText(text), plain: undefined, markups: [] }, tail: [] } };
 }
@@ -75,7 +84,7 @@ export function todayDate() {
 }
 
 const NOT_FOUND_ERROR =
-  'Keine Dokumentenhistorie-Tabelle im intro-Block gefunden (Kopfzeile muss Aktivität/Autor/Datum enthalten).';
+  'No document history table found in the intro block (header row must contain Activity/Author/Date, or the German Aktivität/Autor/Datum).';
 
 export function readHistory(text) {
   let ast;
@@ -88,7 +97,7 @@ export function readHistory(text) {
 
 export function fillInitial(text, { author, date, followup = 'Review' }) {
   if (followup !== '-' && followup !== 'Review') {
-    return { ok: false, error: `--followup muss '-' oder 'Review' sein, erhalten: '${followup}'.` };
+    return { ok: false, error: `--followup must be '-' or 'Review', got: '${followup}'.` };
   }
   let ast;
   try { ast = parseDiagram(text); } catch (e) { return { ok: false, error: e.message }; }
@@ -98,18 +107,18 @@ export function fillInitial(text, { author, date, followup = 'Review' }) {
   if (dataRows.length !== 1) {
     return {
       ok: false,
-      error: `fill-initial erwartet genau eine bestehende Datenzeile (Vorlagenzustand), gefunden: ${dataRows.length}. Für weitere Zeilen 'append' verwenden.`,
+      error: `fill-initial expects exactly one existing data row (template state), found: ${dataRows.length}. Use 'append' for further rows.`,
     };
   }
   const row = dataRows[0];
   const columnCount = found.headerTexts.length;
   if (row.cells.length !== columnCount) {
-    return { ok: false, error: `Zeile hat ${row.cells.length} Zellen, Kopfzeile hat ${columnCount}.` };
+    return { ok: false, error: `Row has ${row.cells.length} cells, header row has ${columnCount}.` };
   }
-  // Folgeaktion defaults to 'Review' on purpose: a freshly planned spec is waiting for review. That is a
-  // follow-up marker, not a review row (those are written by hand after an actual review).
-  // Spalten: Version | Aktivität | Autor | Datum | Folgeaktion — Version/Aktivität kommen bereits
-  // als "0.1"/"Initiale Erstellung" aus der Vorlage und werden nicht angefasst.
+  // The follow-up column defaults to 'Review' on purpose: a freshly planned spec is waiting for review.
+  // That is a follow-up marker, not a review row (those are written by hand after an actual review).
+  // Columns: Version | Activity | Author | Date | Follow-up — Version/Activity already arrive as
+  // "0.1"/"Initiale Erstellung" (initial creation) from the template and are left untouched.
   try {
     row.cells[2] = makeCell(author);
     row.cells[3] = makeCell(date);
@@ -130,7 +139,7 @@ export function appendRow(text, { version, activity, author, date, followup }) {
   if (values.length !== columnCount) {
     return {
       ok: false,
-      error: `Erwarte ${columnCount} Werte (Version/Aktivität/Autor/Datum/Folgeaktion), erhalten: ${values.length}.`,
+      error: `Expected ${columnCount} values (version/activity/author/date/follow-up), got: ${values.length}.`,
     };
   }
   let cells;
@@ -150,13 +159,13 @@ export function importRows(text, { rows }) {
   const found = findHistoryTable(ast);
   if (!found) return { ok: false, error: NOT_FOUND_ERROR };
   if (!Array.isArray(rows) || rows.length === 0) {
-    return { ok: false, error: 'import erwartet mindestens eine Zeile.' };
+    return { ok: false, error: 'import expects at least one row.' };
   }
   const columnCount = found.headerTexts.length;
   const built = [];
   for (const [i, row] of rows.entries()) {
     if (!Array.isArray(row) || row.length !== columnCount) {
-      return { ok: false, error: `Zeile ${i} hat ${Array.isArray(row) ? row.length : 'keine'} Zellen, erwartet ${columnCount}.` };
+      return { ok: false, error: `Row ${i} has ${Array.isArray(row) ? row.length : 'no'} cells, expected ${columnCount}.` };
     }
     try { built.push({ cells: row.map(makeCell) }); } catch (e) { return { ok: false, error: e.message }; }
   }
@@ -167,14 +176,14 @@ export function importRows(text, { rows }) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const json = !!args.json;
-  if (!args.file) { report({ ok: false, error: '--file ist Pflicht.' }, { json }); return; }
-  if (!args.mode) { report({ ok: false, error: '--mode ist Pflicht (read|fill-initial|append|import).' }, { json }); return; }
+  if (!args.file) { report({ ok: false, error: '--file is required.' }, { json }); return; }
+  if (!args.mode) { report({ ok: false, error: '--mode is required (read|fill-initial|append|import).' }, { json }); return; }
 
   let text;
   try {
     text = readFileSync(args.file, 'utf8');
   } catch (e) {
-    report({ ok: false, error: `Datei nicht lesbar: ${args.file} (${e.message})` }, { json });
+    report({ ok: false, error: `File not readable: ${args.file} (${e.message})` }, { json });
     return;
   }
 
@@ -184,17 +193,17 @@ function main() {
   }
 
   if (args.mode === 'fill-initial') {
-    if (!args.author) { report({ ok: false, error: '--author ist Pflicht.' }, { json }); return; }
+    if (!args.author) { report({ ok: false, error: '--author is required.' }, { json }); return; }
     const result = fillInitial(text, { author: args.author, date: args.date || todayDate(), followup: args.followup });
     if (result.ok) writeFileSync(args.file, result.text);
-    report(result.ok ? { ok: true } : result, { json, plainText: () => 'Historie befüllt.' });
+    report(result.ok ? { ok: true } : result, { json, plainText: () => 'History filled.' });
     return;
   }
 
   if (args.mode === 'append') {
     for (const required of ['version', 'activity', 'author', 'followup']) {
       if (args[required] === undefined) {
-        report({ ok: false, error: `--${required} ist Pflicht.` }, { json });
+        report({ ok: false, error: `--${required} is required.` }, { json });
         return;
       }
     }
@@ -203,24 +212,24 @@ function main() {
       date: args.date || todayDate(), followup: args.followup,
     });
     if (result.ok) writeFileSync(args.file, result.text);
-    report(result.ok ? { ok: true } : result, { json, plainText: () => 'Historienzeile angehängt.' });
+    report(result.ok ? { ok: true } : result, { json, plainText: () => 'History row appended.' });
     return;
   }
 
   if (args.mode === 'import') {
-    if (!args['rows-file']) { report({ ok: false, error: '--rows-file ist Pflicht (JSON: Array von 5-Zellen-Arrays).' }, { json }); return; }
+    if (!args['rows-file']) { report({ ok: false, error: '--rows-file is required (JSON: array of 5-cell arrays).' }, { json }); return; }
     let rows;
     try { rows = JSON.parse(readFileSync(args['rows-file'], 'utf8')); } catch (e) {
-      report({ ok: false, error: `--rows-file nicht lesbar/parsebar: ${e.message}` }, { json });
+      report({ ok: false, error: `--rows-file not readable/parsable: ${e.message}` }, { json });
       return;
     }
     const result = importRows(text, { rows });
     if (result.ok) writeFileSync(args.file, result.text);
-    report(result.ok ? { ok: true, rowCount: rows.length } : result, { json, plainText: (r) => `${r.rowCount} Historienzeile(n) übernommen.` });
+    report(result.ok ? { ok: true, rowCount: rows.length } : result, { json, plainText: (r) => `${r.rowCount} history row(s) imported.` });
     return;
   }
 
-  report({ ok: false, error: `Unbekannter --mode: ${args.mode} (erwartet read|fill-initial|append|import)` }, { json });
+  report({ ok: false, error: `Unknown --mode: ${args.mode} (expected read|fill-initial|append|import)` }, { json });
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) main();

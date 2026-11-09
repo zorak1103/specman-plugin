@@ -30,8 +30,8 @@ test('applyInsertImage can target outro/intro and honours positions', () => {
 });
 
 test('applyInsertImage reports unknown steps, bad positions and non-PNG data', () => {
-  assert.match(applyInsertImage(TEMPLATE, { stepSelector: 'deadbeef', png: TINY_PNG }).error, /nicht gefunden/);
+  assert.match(applyInsertImage(TEMPLATE, { stepSelector: 'deadbeef', png: TINY_PNG }).error, /not found/);
   assert.match(applyInsertImage(TEMPLATE, { stepSelector: STEP_ID, png: TINY_PNG, position: 'sideways' }).error, /position/);
   assert.match(applyInsertImage(TEMPLATE, { stepSelector: STEP_ID, png: Buffer.from('nope-not-a-png') }).error, /PNG/);
-  assert.match(applyInsertImage(TEMPLATE, { stepSelector: STEP_ID, png: TINY_PNG, position: 'after:tail[9]' }).error, /nicht existierenden Index/);
+  assert.match(applyInsertImage(TEMPLATE, { stepSelector: STEP_ID, png: TINY_PNG, position: 'after:tail[9]' }).error, /non-existent index/);
 });

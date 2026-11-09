@@ -42,5 +42,5 @@ test('applyMarkChange refuses source/target (not supported in v1 — see plan)',
 test('applyMarkChange reports a clear error for an unknown step', () => {
   const result = applyMarkChange(src, { stepSelector: '99', kind: 'added', changeset: 'yellow' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /nicht gefunden/);
+  assert.match(result.error, /not found/);
 });

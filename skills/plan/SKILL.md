@@ -1,7 +1,7 @@
 ---
 name: plan
 description: "Interviews the user to design a new Specman SUC (or sub-SUC) specification, then generates the .nsd file from the template and sanitizes it. Use only when a genuinely new specification needs to be created from scratch. Not for editing an existing .nsd (use edit) or for implementing code from one (use implement)."
-argument-hint: "[--dir <spec-ordner>] [--parent <suc-nummer>]"
+argument-hint: "[--dir <spec-folder>] [--parent <suc-number>]"
 allowed-tools:
   - Read
   - Write
@@ -11,157 +11,163 @@ allowed-tools:
 
 # plan
 
-Baut eine neue Spezifikation in zwei Phasen: erst ein Interview mit einer privaten
-Arbeits-Outline (nie zur Freigabe vorgelegt), dann Erzeugung und Sanitizing der eigentlichen
-`.nsd`-Datei (die einzige Freigabe-relevante Ausgabe).
+Builds a new specification in two phases: first an interview with a private working outline
+(never presented for approval), then generation and sanitizing of the actual `.nsd` file (the
+only output that needs approval).
 
-## Schritt 0 — Voraussetzung prüfen: Sanitizer-Jar
+## Step 0 — Prerequisite check: sanitizer jar
 
-Bevor irgendetwas angefasst wird, prüfen, ob die Umgebungsvariable `SPECMAN_JAR` stimmt — der
-Sanitizer-Schritt am Ende scheitert sonst erst nach getaner Arbeit:
+Before touching anything, check that the `SPECMAN_JAR` environment variable is valid — otherwise
+the sanitizer step at the end only fails after the work is done:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json
 ```
 
-* `ok: false`: **Stopp.** `error` wörtlich an den Nutzer weitergeben (Variable fehlt, Pfad
-  existiert nicht, zeigt auf ein Verzeichnis oder keine gültige `.jar`) und bitten, `SPECMAN_JAR`
-  auf den vollen Pfad der `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) zu setzen und die
-  Claude-Code-Session neu zu starten. Nicht weiterarbeiten, nicht „später sanitizen".
-* `ok: true` mit nicht-leerem `warnings`: jede Warnung dem Nutzer zeigen (z. B. Jar älter als
-  Specman 1.4.0 oder Version nicht erkennbar) und per `AskUserQuestion` fragen, ob trotzdem
-  weitergemacht werden soll.
-* `ok: true` ohne Warnungen: still weiter zu Schritt 1.
+* `ok: false`: **Stop.** Relay `error` to the user verbatim (variable missing, path does not
+  exist, points to a directory or to an invalid `.jar`) and ask them to set `SPECMAN_JAR` to the
+  full path of the `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) and restart the
+  Claude Code session. Do not continue, and do not "sanitize later".
+* `ok: true` with a non-empty `warnings`: show each warning to the user (e.g. jar older than
+  Specman 1.4.0 or version not detectable) and ask via `AskUserQuestion` whether to continue
+  anyway.
+* `ok: true` without warnings: continue silently to Step 1.
 
-## Schritt 1 — Zielordner und Nummer
+## Step 1 — Target folder and number
 
-Ordner vom Nutzer erfragen, falls nicht über `--dir` gegeben (der projektspezifische Spec-Ordner,
-siehe `.claude/specman.local.md` → `specDir`, falls vorhanden).
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-suc-number.mjs" --dir <ordner> [--parent <suc-nummer>] --json
-```
-
-Ergebnis (`number`) dem Nutzer vorschlagen, nicht stillschweigend übernehmen — er kennt die
-richtige Themen-Range (z. B. `9xx`) und kann eine andere Nummer wollen.
-
-## Schritt 2 — Eigener Unter-SUC oder nicht?
-
-Falls der Nutzer einen größeren, mehrteiligen Ablauf beschreibt: **eine Frage stellen**, ob ein
-Teilablauf einen eigenen Unter-SUC verdient (separate `.nsd`-Datei, hierarchisch benannt,
-z. B. `SUC-902.4 <Titel>.nsd`) oder als Subsequenz innerhalb dieser einen Datei bleibt. Das ist
-eine Urteilsfrage — keine automatische Aufteilungslogik. Querverweise zwischen SUC-Dateien sind
-immer reiner Fließtext im Stil „Siehe SUC-902.1.2 <Titel>", nie ein struktureller Link.
-
-## Schritt 3 — Interview
-
-Ein Punkt pro Nachfrage, bis Folgendes klar ist:
-
-1. Zweck / Kurzbeschreibung
-2. Auslöser / Vorbedingungen
-3. Akteure
-4. Hauptablauf (Schritt für Schritt)
-5. Ausnahmen / Abbruchfälle
-6. Nachbedingungen / Ergebnis(e)
-7. Geschäftsregeln / nichtfunktionale Anforderungen (optional)
-
-Bevorzugt `AskUserQuestion` mit klaren Optionen, wo sinnvoll; sonst offene Fragen.
-
-## Schritt 4 — Private Arbeits-Outline
-
-Halte den Interview-Stand als Markdown fest unter
-`C:/Users/<user>/.claude/tmp/scratch/<slug>-outline.md` (Konvention für flüchtige
-Zwischendateien aus dem globalen CLAUDE.md des Nutzers). Diese Datei ist ein reines Arbeitsmittel
-für dich selbst — **niemals dem Nutzer zur Freigabe vorlegen**, niemals darauf verweisen als wäre
-sie das Ergebnis. Nach erfolgreichem Sanitizing in Schritt 7 löschen.
-
-## Schritt 5 — Datei anlegen
-
-Vorlage `${CLAUDE_PLUGIN_ROOT}/reference/suc-template.nsd` nach `<ordner>/SUC-<nummer> <Titel>.nsd`
-kopieren (`Read` + `Write`, keine Bash-Kopie — Konsistenz mit dem Rest des Plugins).
-
-## Schritt 6 — Struktur befüllen
-
-Anhand der Outline aus Schritt 4 die Ablaufspezifikation aufbauen — pro Hauptschritt eine
-Subsequenz oder ein einfacher Schritt, je nach Komplexität. Verzweigungen (Bedingungen,
-Fallunterscheidungen, Schleifen) direkt als solche abbilden, nicht als Fließtext-Ersatz:
+Ask the user for the folder if it was not given via `--dir` (the project-specific spec folder,
+see `.claude/specman.local.md` → `specDir`, if present).
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <datei> --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-insert-step.mjs" --file <datei> --parent <sequence-key> --position end --kind simple|break|while|doWhile|subsequence|if|ifElse|case [--branches <n>] --html <html> --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <datei> --step <id> --area <key> --html <html> --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <datei> --step <id> --op insert --kind text|list|table --position start|end|after:tail[i] [...] --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-suc-number.mjs" --dir <folder> [--parent <suc-number>] --json
 ```
 
-Nie selbst DSL-Text von Hand schreiben, auch nicht für Titel und intro/outro (Details im
-`edit`-Skill, Schritt 2 und 4):
+Propose the result (`number`) to the user, do not adopt it silently — they know the right topic
+range (e.g. `9xx`) and may want a different number.
+
+## Step 2 — Separate sub-SUC or not?
+
+If the user describes a larger, multi-part flow: **ask one question** whether a partial flow
+deserves its own sub-SUC (separate `.nsd` file, named hierarchically,
+e.g. `SUC-902.4 <title>.nsd`) or stays as a subsequence within this one file. This is a judgment
+call — there is no automatic splitting logic. Cross-references between SUC files are always plain
+running text in the style "See SUC-902.1.2 <title>", never a structural link.
+
+## Step 3 — Interview
+
+One point per follow-up question, until the following is clear:
+
+1. Purpose / short description
+2. Trigger / preconditions
+3. Actors
+4. Main flow (step by step)
+5. Exceptions / abort cases
+6. Postconditions / result(s)
+7. Business rules / non-functional requirements (optional)
+
+Prefer `AskUserQuestion` with clear options where sensible; otherwise open questions.
+
+## Step 4 — Private working outline
+
+Record the interview state as Markdown under
+`C:/Users/<user>/.claude/tmp/scratch/<slug>-outline.md` (convention for ephemeral intermediate
+files from the user's global CLAUDE.md). This file is purely a working tool for yourself —
+**never present it to the user for approval**, never refer to it as if it were the result.
+Delete it after successful sanitizing in Step 7.
+
+## Step 5 — Create the file
+
+Copy the template `${CLAUDE_PLUGIN_ROOT}/reference/suc-template.nsd` to
+`<folder>/SUC-<number> <title>.nsd` (`Read` + `Write`, no Bash copy — consistent with the rest of
+the plugin). The vendored template is German, so the new spec starts with German section headings
+and placeholders; replace their content with the interview results.
+
+## Step 6 — Fill the structure
+
+Build the flow specification from the outline of Step 4 — one subsequence or one simple step per
+main step, depending on complexity. Map branches (conditions, case distinctions, loops) directly
+as such, not as a running-text substitute:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <datei> --step intro --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <datei> --step intro --title "SUC-<nummer> <Titel>" --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <datei> --step intro --area <tail-key aus sections> --section Beschreibung --text "<Klartext>" --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <datei> --step intro --area <liste>.items[0] --html <html> --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <datei> --step intro --op add-item --area <liste> --position end --html <html> --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <datei> --step outro --area head --section Geschäftsregeln --text "<Klartext>" --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <datei> --step outro --op insert --kind text --position after:<tail-key> --heading Akzeptanzkriterien --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <datei> --step outro --op insert --kind table --position after:<tail-key> --rows '[["Nr","Kriterium"],["1","..."]]' --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-catch.mjs" --file <datei> --op add --break <break-stepId> --head "<Klartext>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <file> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-insert-step.mjs" --file <file> --parent <sequence-key> --position end --kind simple|break|while|doWhile|subsequence|if|ifElse|case [--branches <n>] --html <html> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <file> --step <id> --area <key> --html <html> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <file> --step <id> --op insert --kind text|list|table --position start|end|after:tail[i] [...] --json
 ```
 
-Pflicht nach dem Befüllen: Titel gesetzt (nicht mehr `SUC-000 Template`), Beschreibung sowie
-Auslöser- und Resultat-Listen aus dem Interview, Geschäftsregeln/Akzeptanzkriterien soweit
-erhoben, und zu jedem Ausnahme-/Abbruchfall ein `break` mit `catch` (Interview-Punkt 5) —
-`nsd-locate` ohne `--step` darf am Ende keine `uncaughtBreaks` melden. Soll ein Schritt aus einer
-anderen Spec seine ID behalten: `nsd-insert-step ... --id <8 Hex>`.
+Never write DSL text by hand, not even for the title and intro/outro (details in the
+`edit` skill, Step 2 and 4). The section headings below (`Beschreibung` = description,
+`Geschäftsregeln` = business rules, `Akzeptanzkriterien` = acceptance criteria) are the German
+headings of the vendored template:
 
-Weitere Regeln: Tabellen und Listen als echte Areas über `nsd-area.mjs`
-anlegen (siehe `edit`-Skill Schritt 4 für alle Operationen und Optionen), nicht als Fließtext
-imitieren. Bei einem strukturierten Kind (`while`/`doWhile`/
-`subsequence`/`if`/`ifElse`/`case`) füllt `nsd-insert-step.mjs` jeden zwingenden Zweig/Body
-zunächst mit einem Platzhalter — `insertedStepId`/`placeholderStepIds` aus der Antwort sofort mit
-`nsd-set-text.mjs` befüllen (Zweig-Überschriften über die Areas `ifBranch.head`/`elseBranch.head`/
-`defaultBranch.head`/`caseBranch[n].head`, siehe `edit`-Skill Schritt 4 für Details). Beschreibung,
-Ablaufspezifikation und Offene-Punkte aus dem Template beibehalten (siehe
-`reference/suc-template.nsd`), Inhalte aus dem Interview einsetzen.
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <file> --step intro --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <file> --step intro --title "SUC-<number> <title>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <file> --step intro --area <tail key from sections> --section Beschreibung --text "<plain text>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <file> --step intro --area <list>.items[0] --html <html> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <file> --step intro --op add-item --area <list> --position end --html <html> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-set-text.mjs" --file <file> --step outro --area head --section Geschäftsregeln --text "<plain text>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <file> --step outro --op insert --kind text --position after:<tail-key> --heading Akzeptanzkriterien --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-area.mjs" --file <file> --step outro --op insert --kind table --position after:<tail-key> --rows '[["Nr","Kriterium"],["1","..."]]' --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-catch.mjs" --file <file> --op add --break <break-stepId> --head "<plain text>" --json
+```
 
-## Schritt 6a — Dokumentenhistorie befüllen
+Required after filling: title set (no longer `SUC-000 Template`), description as well as trigger
+and result lists from the interview, business rules/acceptance criteria as far as gathered, and
+for every exception/abort case a `break` with a `catch` (interview point 5) — at the end,
+`nsd-locate` without `--step` must not report any `uncaughtBreaks`. If a step from another spec
+should keep its ID: `nsd-insert-step ... --id <8 hex>`.
 
-Die Vorlage bringt bereits eine Zeile `0.1 | Initiale Erstellung | (leer) | (leer) | (leer)` mit.
-Autor auflösen und die drei leeren Zellen befüllen:
+Further rules: create tables and lists as real areas via `nsd-area.mjs`
+(see `edit` skill Step 4 for all operations and options), do not imitate them as running text.
+For a structured child (`while`/`doWhile`/
+`subsequence`/`if`/`ifElse`/`case`), `nsd-insert-step.mjs` first fills every mandatory branch/body
+with a placeholder — immediately fill `insertedStepId`/`placeholderStepIds` from the response with
+`nsd-set-text.mjs` (branch headings via the areas `ifBranch.head`/`elseBranch.head`/
+`defaultBranch.head`/`caseBranch[n].head`, see `edit` skill Step 4 for details). Keep the
+description (`Beschreibung`), flow specification (`Ablaufspezifikation`) and open items
+(`Offene Punkte`) from the template (see `reference/suc-template.nsd`), and insert the content from
+the interview.
+
+## Step 6a — Fill in the document history
+
+The template already comes with a row `0.1 | Initiale Erstellung | (leer) | (leer) | (leer)`
+(`Initiale Erstellung` = initial creation, `(leer)` = empty). The history columns are `Aktivität`
+(activity), `Autor` (author) and `Datum` (date); English headers (Activity/Author/Date) are also
+accepted. Resolve the author and fill the three empty cells:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --get author --json
 ```
 
-Leer (erste Nutzung) → Namen erfragen, abkürzen lassen, bestätigen, merken:
+Empty (first use) → ask for the name, have it abbreviated, confirm, remember:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --abbreviate-name "<voller Name>" --json
-node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --set author --value "<bestätigter, abgekürzter Name>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --abbreviate-name "<full name>" --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/specman-config.mjs" --set author --value "<confirmed, abbreviated name>" --json
 ```
 
-Dann die Zeile schreiben (Version `0.1` und Aktivität `Initiale Erstellung` bleiben unangetastet,
-Datum ist das heutige):
+Then write the row (version `0.1` and activity `Initiale Erstellung` stay untouched, the date is
+today's):
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-history.mjs" --file <datei> --mode fill-initial --author "<Name>" [--followup <-|Review>] --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-history.mjs" --file <file> --mode fill-initial --author "<name>" [--followup <-|Review>] --json
 ```
 
-Die Folgeaktion ist standardmäßig `Review` (eine frisch geplante Spec wartet auf ihr Review);
-`--followup -` nur, wenn der Nutzer das ausdrücklich will.
+The follow-up action defaults to `Review` (a freshly planned spec awaits its review);
+`--followup -` only if the user explicitly wants that.
 
-## Schritt 7 — Sanitizen
+## Step 7 — Sanitize
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <datei> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <file> --json
 ```
 
-Bei `ERROR`: Ursache beheben, erneut versuchen. Bei `OK`/`SANITIZED`: Outline-Datei aus Schritt 4
-löschen. Enthält die Antwort ein `warnings`-Array (z. B. Jar älter als Specman 1.4.0), jede
-Warnung dem Nutzer zeigen.
+On `ERROR`: fix the cause, try again. On `OK`/`SANITIZED`: delete the outline file from Step 4.
+If the response contains a `warnings` array (e.g. jar older than Specman 1.4.0), show each
+warning to the user.
 
-## Schritt 8 — Zusammenfassung zur Freigabe
+## Step 8 — Summary for approval
 
-Klartext-Zusammenfassung des Ergebnisses zeigen (Dateiname, Hauptschritte, offene Punkte) — **nie
-die rohe `.nsd` als Freigabe-Artefakt zeigen**. Das ist der erste und einzige Freigabepunkt in
-diesem Skill.
+Show a plain-text summary of the result (file name, main steps, open items) — **never show the
+raw `.nsd` as the approval artifact**. This is the first and only approval point in this skill.

@@ -91,3 +91,17 @@ test('an unknown op is refused', () => {
   assert.equal(r.ok, false);
   assert.equal(r.error, "nsd-plantuml: unknown --op 'frobnicate' (expected: get, set, insert).");
 });
+
+test('get: a spec with CRLF line endings yields LF-only source and backup.source', () => {
+  const crlf = diagram14().replace(/\n/g, '\r\n');
+  assert.ok(crlf.includes('@startuml\r\nA -> B'), 'fixture really contains CRLF inside the backtick source');
+  const plain = applyPlantuml(crlf, { op: 'get', stepSelector: '5582897d', areaKey: 'tail[1]' });
+  assert.equal(plain.ok, true);
+  assert.equal(plain.source, '@startuml\nA -> B\n@enduml');
+  const changed = applyPlantuml(crlf, { op: 'get', stepSelector: '5582897d', areaKey: 'tail[2]' });
+  assert.equal(changed.ok, true);
+  assert.equal(changed.source, '@startuml\nA -> C\n@enduml');
+  assert.equal(changed.backup.source, '@startuml\nA -> B\n@enduml');
+  assert.equal(changed.source.includes('\r'), false);
+  assert.equal(changed.backup.source.includes('\r'), false);
+});

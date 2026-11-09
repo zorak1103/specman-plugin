@@ -54,11 +54,14 @@ export function unwrap(raw) {
   return raw.slice(1, -1);
 }
 
+// `get` reports LF newlines even for a spec saved with CRLF; `unwrap` stays raw for callers that compare/store.
+const toLf = (s) => s.replace(/\r\n/g, '\n');
+
 function getArea(found, areaKey) {
   const { area, index } = resolvePlantumlArea(found, areaKey);
-  const result = { ok: true, areaKey: `tail[${index}]`, scalePercent: area.scalePercent, source: unwrap(area.raw) };
+  const result = { ok: true, areaKey: `tail[${index}]`, scalePercent: area.scalePercent, source: toLf(unwrap(area.raw)) };
   if (area.change) result.change = area.change;
-  if (area.backup) result.backup = { changeset: area.backup.changeset, source: unwrap(area.backup.raw) };
+  if (area.backup) result.backup = { changeset: area.backup.changeset, source: toLf(unwrap(area.backup.raw)) };
   return result;
 }
 

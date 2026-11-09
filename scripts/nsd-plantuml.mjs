@@ -4,7 +4,7 @@
 // so specs older than 1.4.0 are refused (open and save them once in Specman 1.4.0+ first).
 //
 //   get     prints the source of one PlantUML area (plus scale, change mark and backup); never writes.
-//   set     replaces the source of an existing PlantUML area.            (not implemented yet)
+//   set     replaces the source of an existing PlantUML area; with --changeset the old source is kept as `backup=`.
 //   insert  adds a new PlantUML area at a position in the tail.          (not implemented yet)
 //
 // Areas are addressed by their tail key (`tail[<i>]`, as listed by nsd-locate / nsd-tail-areas). The
@@ -16,7 +16,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isMainModule, report, parseArgs } from './lib/cli.mjs';
-import { parseDiagram } from './lib/nsd-ast.mjs';
+import { parseDiagram, serializeDiagram } from './lib/nsd-ast.mjs';
 import { resolveTarget, resolveTailContainer } from './lib/nsd-paths.mjs';
 import { compareVersions } from './lib/versions.mjs';
 
@@ -65,7 +65,50 @@ function getArea(found, areaKey) {
   return result;
 }
 
-export function applyPlantuml(text, { op, stepSelector, areaKey } = {}) {
+/**
+ * Normalises new PlantUML source for storage: trims, converts \r\n to \n, and throws a descriptive
+ * Error if it contains a backtick (a backtick string has no escape) or is not an @start...@end<word> block.
+ */
+export function normalizeSource(source) {
+  if (typeof source !== 'string') throw new Error('nsd-plantuml: the PlantUML source is required (--source-file <path|->).');
+  const normalized = toLf(source.trim());
+  if (normalized.includes('`')) {
+    throw new Error('nsd-plantuml: the PlantUML source must not contain a backtick (`); the .nsd format has no escape for it.');
+  }
+  if (!/^@start/.test(normalized) || !/@end\w+$/.test(normalized)) {
+    throw new Error('nsd-plantuml: the PlantUML source must start with @start... and end with @end... (e.g. @startuml ... @enduml).');
+  }
+  return normalized;
+}
+
+/**
+ * Replaces the source of a PlantUML area in the parsed AST. With a changeset the old raw is kept as
+ * `backup` unless one for the same changeset exists or the area is new in this changeset.
+ * Returns `{ areaKey, backupWritten }`.
+ */
+function setArea(found, areaKey, source, changeset) {
+  const { area, index } = resolvePlantumlArea(found, areaKey);
+  const raw = `\`${normalizeSource(source)}\``;
+  let backupWritten = false;
+  if (changeset) {
+    if (area.backup && area.backup.changeset === changeset) {
+      // keep: it already holds the pre-changeset source
+    } else if (area.backup) {
+      throw new Error(`nsd-plantuml: area 'tail[${index}]' already has a backup for changeset '${area.backup.changeset}'; refusing to overwrite it for changeset '${changeset}'.`);
+    } else if (area.change?.kind === 'removed') {
+      throw new Error(`nsd-plantuml: area 'tail[${index}]' is marked as removed; it cannot be edited in a changeset.`);
+    } else if (area.change?.kind === 'added' && area.change.changeset === changeset) {
+      // new in this changeset: nothing to restore
+    } else {
+      area.backup = { changeset, raw: area.raw };
+      backupWritten = true;
+    }
+  }
+  area.raw = raw;
+  return { areaKey: `tail[${index}]`, backupWritten };
+}
+
+export function applyPlantuml(text, { op, stepSelector, areaKey, source, changeset } = {}) {
   if (!OPS.includes(op)) {
     return { ok: false, error: `nsd-plantuml: unknown --op '${op}' (expected: ${OPS.join(', ')}).` };
   }
@@ -75,6 +118,10 @@ export function applyPlantuml(text, { op, stepSelector, areaKey } = {}) {
     const found = resolveTarget(ast, stepSelector);
     if (!found) return { ok: false, error: `Step not found: ${stepSelector}` };
     if (op === 'get') return getArea(found, areaKey);
+    if (op === 'set') {
+      const done = setArea(found, areaKey, source, changeset);
+      return { ok: true, text: serializeDiagram(ast), ...done };
+    }
     return { ok: false, error: `nsd-plantuml: --op ${op} is not implemented yet.` };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -92,7 +139,7 @@ function main() {
   let source;
   try {
     text = readFileSync(args.file, 'utf8');
-    if (args['source-file'] !== undefined) {
+    if ((args.op === 'set' || args.op === 'insert') && args['source-file'] !== undefined) {
       source = readFileSync(args['source-file'] === '-' ? 0 : args['source-file'], 'utf8');
     }
   } catch (e) {

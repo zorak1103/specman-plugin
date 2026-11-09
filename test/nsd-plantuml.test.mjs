@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { applyPlantuml } from '../scripts/nsd-plantuml.mjs';
+import { parseDiagram, serializeDiagram } from '../scripts/lib/nsd-ast.mjs';
+import { resolveTarget } from '../scripts/lib/nsd-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.join(__dirname, '..', 'reference', 'suc-template.nsd');
@@ -104,4 +106,175 @@ test('get: a spec with CRLF line endings yields LF-only source and backup.source
   assert.equal(changed.backup.source, '@startuml\nA -> B\n@enduml');
   assert.equal(changed.source.includes('\r'), false);
   assert.equal(changed.backup.source.includes('\r'), false);
+});
+
+// ---------------------------------------------------------------- set
+
+const NEW_SOURCE = '@startuml\nA -> C\n@enduml';
+const OLD_RAW = '`@startuml\nA -> B\n@enduml`';
+
+function setOpts(extra = {}) {
+  return { op: 'set', stepSelector: '5582897d', areaKey: 'tail[1]', source: NEW_SOURCE, ...extra };
+}
+
+function tailOf(text, i) {
+  return resolveTarget(parseDiagram(text), '5582897d').step.content.tail[i];
+}
+
+function singleImageBody(imageLine) {
+  return (
+    '    simple(1, 5582897d, `img`, plain=`img`) {\n' +
+    `        ${imageLine}\n` +
+    '    }\n'
+  );
+}
+
+test('set: an untracked set replaces only the source', () => {
+  const r = applyPlantuml(diagram14(), setOpts());
+  assert.equal(r.ok, true);
+  assert.equal(r.areaKey, 'tail[1]');
+  assert.equal(r.backupWritten, false);
+  const area = tailOf(r.text, 1);
+  assert.equal(area.raw, '`@startuml\nA -> C\n@enduml`');
+  assert.equal(area.backup, undefined);
+  assert.equal(area.change, undefined);
+  assert.equal(area.scalePercent, '100%');
+});
+
+test('set: an untracked set leaves existing change and backup untouched', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ areaKey: 'tail[2]', source: '@startuml\nX -> Y\n@enduml' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.backupWritten, false);
+  const area = tailOf(r.text, 2);
+  assert.equal(area.raw, '`@startuml\nX -> Y\n@enduml`');
+  assert.equal(area.change.kind, 'added');
+  assert.equal(area.change.changeset, 'yellow');
+  assert.deepEqual(area.backup, { changeset: 'yellow', raw: OLD_RAW });
+});
+
+test('set: a tracked set writes the old source as backup and no change mark', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ changeset: 'blue' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.backupWritten, true);
+  const area = tailOf(r.text, 1);
+  assert.equal(area.raw, '`@startuml\nA -> C\n@enduml`');
+  assert.deepEqual(area.backup, { changeset: 'blue', raw: OLD_RAW });
+  assert.equal(area.change, undefined);
+});
+
+test('set: a tracked set in the same changeset keeps the existing backup', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ areaKey: 'tail[2]', changeset: 'yellow', source: '@startuml\nX -> Y\n@enduml' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.backupWritten, false);
+  const area = tailOf(r.text, 2);
+  assert.equal(area.raw, '`@startuml\nX -> Y\n@enduml`');
+  assert.deepEqual(area.backup, { changeset: 'yellow', raw: OLD_RAW });
+  assert.equal(area.change.kind, 'added');
+});
+
+test('set: a tracked set in another changeset than the existing backup is refused', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ areaKey: 'tail[2]', changeset: 'blue' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /backup/);
+  assert.equal('text' in r, false);
+});
+
+test('set: a tracked set on a removed area is refused', () => {
+  const body = singleImageBody('image(scale=100%, type=plantuml, change=(removed, blue)) { `@startuml\nA -> B\n@enduml` }');
+  const r = applyPlantuml(diagram14(body), setOpts({ areaKey: 'tail[0]', changeset: 'blue' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /removed/);
+  assert.equal('text' in r, false);
+});
+
+test('set: a tracked set on an area added in the same changeset writes no backup', () => {
+  const body = singleImageBody('image(scale=100%, type=plantuml, change=(added, blue)) { `@startuml\nA -> B\n@enduml` }');
+  const r = applyPlantuml(diagram14(body), setOpts({ areaKey: 'tail[0]', changeset: 'blue' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.backupWritten, false);
+  const area = tailOf(r.text, 0);
+  assert.equal(area.raw, '`@startuml\nA -> C\n@enduml`');
+  assert.equal(area.backup, undefined);
+  assert.equal(area.change.kind, 'added');
+  assert.equal(area.change.changeset, 'blue');
+});
+
+test('set: a tracked set on an area added in another changeset writes a backup', () => {
+  const body = singleImageBody('image(scale=100%, type=plantuml, change=(added, yellow)) { `@startuml\nA -> B\n@enduml` }');
+  const r = applyPlantuml(diagram14(body), setOpts({ areaKey: 'tail[0]', changeset: 'blue' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.backupWritten, true);
+  assert.deepEqual(tailOf(r.text, 0).backup, { changeset: 'blue', raw: OLD_RAW });
+});
+
+test('set: a source containing a backtick is refused', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ source: '@startuml\nA -> `B`\n@enduml' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /backtick/);
+  assert.equal('text' in r, false);
+});
+
+test('set: a source without @start...@end is refused', () => {
+  for (const source of ['hello', '@startuml\nA -> B', 'A -> B\n@enduml', '   ']) {
+    const r = applyPlantuml(diagram14(), setOpts({ source }));
+    assert.equal(r.ok, false, JSON.stringify(source));
+    assert.match(r.error, /@start/, JSON.stringify(source));
+    assert.equal('text' in r, false);
+  }
+});
+
+test('set: a missing source or a missing --area names the missing option', () => {
+  const noSource = applyPlantuml(diagram14(), { op: 'set', stepSelector: '5582897d', areaKey: 'tail[1]' });
+  assert.equal(noSource.ok, false);
+  assert.match(noSource.error, /--source-file/);
+  const noArea = applyPlantuml(diagram14(), { op: 'set', stepSelector: '5582897d', source: NEW_SOURCE });
+  assert.equal(noArea.ok, false);
+  assert.match(noArea.error, /--area/);
+});
+
+test('set: CRLF in the new source is stored as LF and surrounding whitespace is trimmed', () => {
+  const r = applyPlantuml(diagram14(), setOpts({ source: '\r\n  @startuml\r\nA -> C\r\n@enduml  \r\n\r\n' }));
+  assert.equal(r.ok, true);
+  const raw = tailOf(r.text, 1).raw;
+  assert.equal(raw, '`@startuml\nA -> C\n@enduml`');
+  assert.equal(raw.includes('\r'), false);
+});
+
+test('set: the old raw is saved verbatim into the backup, also from a CRLF spec', () => {
+  const crlf = diagram14().replace(/\n/g, '\r\n');
+  const r = applyPlantuml(crlf, setOpts({ changeset: 'blue' }));
+  assert.equal(r.ok, true);
+  assert.equal(tailOf(r.text, 1).backup.raw, '`@startuml\r\nA -> B\r\n@enduml`');
+});
+
+test('set: a png and a text area are refused as not PlantUML', () => {
+  for (const areaKey of ['tail[0]', 'tail[3]']) {
+    const r = applyPlantuml(diagram14(), setOpts({ areaKey }));
+    assert.equal(r.ok, false, areaKey);
+    assert.match(r.error, /not a PlantUML/, areaKey);
+    assert.equal('text' in r, false);
+  }
+});
+
+test('set: a spec older than Specman 1.4.0 is refused', () => {
+  const r = applyPlantuml(readFileSync(templatePath, 'utf8'), setOpts({ stepSelector: 'intro', areaKey: 'tail[0]' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Specman 1\.4\.0/);
+  assert.equal('text' in r, false);
+});
+
+test('set: a successful set round-trips through parse and serialize', () => {
+  for (const opts of [setOpts(), setOpts({ changeset: 'blue' }), setOpts({ areaKey: 'tail[2]', changeset: 'yellow' })]) {
+    const r = applyPlantuml(diagram14(), opts);
+    assert.equal(r.ok, true);
+    assert.equal(serializeDiagram(parseDiagram(r.text)), r.text);
+  }
+});
+
+test('set: never mutates its input and changes nothing but the addressed area', () => {
+  const input = diagram14();
+  const copy = String(input);
+  const r = applyPlantuml(input, setOpts());
+  assert.equal(input, copy);
+  assert.equal(r.text.replace('A -> C', 'A -> B'), serializeDiagram(parseDiagram(input)));
 });

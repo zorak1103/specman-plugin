@@ -252,7 +252,7 @@ function applyRemove(step, { areaKey, changeset }) {
     return { ok: false, error: `nsd-area: '${areaKey}' addresses a row or an item, not a whole area — use remove-row/remove-item.` };
   }
   if (area.kind === 'image') {
-    return { ok: false, error: 'nsd-area: image areas are never modified by this plugin.' };
+    return { ok: false, error: 'nsd-area: image areas cannot be removed by this plugin (PlantUML diagrams are changed with nsd-plantuml.mjs).' };
   }
   if (changeset) {
     if (area.kind === 'list') {

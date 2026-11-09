@@ -48,6 +48,24 @@ entfallen); **Kommentare werden ignoriert**; Kontrollfluss wird **automatisch** 
 if/ifElse/case/while/`break`+Catch abgebildet; Bilder werden als **Wireframe-Bilder** übernommen;
 die Historie der docx wird übernommen und um eine Migrationszeile ergänzt.
 
+## Schritt 0 — Voraussetzung prüfen: Sanitizer-Jar
+
+Bevor irgendetwas angefasst wird, prüfen, ob die Umgebungsvariable `SPECMAN_JAR` stimmt — der
+Sanitizer-Schritt am Ende scheitert sonst erst nach getaner Arbeit:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json
+```
+
+* `ok: false`: **Stopp.** `error` wörtlich an den Nutzer weitergeben (Variable fehlt, Pfad
+  existiert nicht, zeigt auf ein Verzeichnis oder keine gültige `.jar`) und bitten, `SPECMAN_JAR`
+  auf den vollen Pfad der `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) zu setzen und die
+  Claude-Code-Session neu zu starten. Nicht weiterarbeiten, nicht „später sanitizen".
+* `ok: true` mit nicht-leerem `warnings`: jede Warnung dem Nutzer zeigen (z. B. Jar älter als
+  Specman 1.4.0 oder Version nicht erkennbar) und per `AskUserQuestion` fragen, ob trotzdem
+  weitergemacht werden soll.
+* `ok: true` ohne Warnungen: still weiter zu Schritt 1.
+
 ## Schritt 1 — Ziel und Umfang
 
 * `--file <docx>`: genau diese Datei.
@@ -231,6 +249,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/migrate-verify.mjs" --extract <extract.json>
   Umgebungsvariable und sucht nicht selbst). Dann Nutzer fragen, ob nach dem JAR gesucht werden
   soll, und den Pfad nennen lassen oder bestätigen (siehe README) — Sanitizing wird nicht
   übersprungen.
+* `warnings` in der Sanitizer-Antwort (bei jedem Status): jede Warnung dem Nutzer zeigen (Jar zu
+  alt, Spezifikation von einem neueren Specman als die Jar).
 * `stepNumberChanges` in der Sanitizer-Antwort: Der Sanitizer hat Schrittnummern verschoben. Bei
   einer frischen Migration harmlos. Wird eine bereits migrierte `.nsd` neu gebaut und verweisen
   Code-Kommentare auf ihre Schrittnummern, danach `sync-refs` vorschlagen.

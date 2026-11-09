@@ -40,16 +40,34 @@ nie ein Grund, selbst DSL-Text zu konstruieren.
 
 * Java (zum Ausführen der Specman-Sanitizer-Jar)
 * Die Environment-Variable `SPECMAN_JAR`, gesetzt auf den vollen Pfad zur
-  `specman-*-jar-with-dependencies.jar`. Die Jar selbst ist nicht Teil dieses Plugins (~48-50 MB,
-  zu groß fürs Repo) — siehe `VENDORING.md` für Bezugsquelle und Update-Hinweise.
+  `specman-*-jar-with-dependencies.jar` (Specman *1.4.0 oder neuer*). Die Jar selbst ist nicht Teil
+  dieses Plugins (~50-70 MB, zu groß fürs Repo) — siehe `VENDORING.md` für Bezugsquelle und
+  Update-Hinweise.
 
 [source,bash]
 ----
-export SPECMAN_JAR="/pfad/zu/specman-1.3.0-jar-with-dependencies.jar"
+export SPECMAN_JAR="/pfad/zu/specman-1.4.0-jar-with-dependencies.jar"
 ----
 
 Unter Windows als Nutzer- oder Systemvariable setzen, damit sie in jeder Claude-Code-Session
-verfügbar ist.
+verfügbar ist (nach dem Setzen Claude Code neu starten).
+
+Die Skills `plan`, `edit` und `migrate` prüfen die Variable in „Schritt 0“, bevor sie etwas
+anfassen, und brechen mit einer klaren Meldung ab, wenn sie fehlt, auf ein Verzeichnis oder eine
+Nicht-Jar-Datei zeigt oder die Datei nicht existiert. Warnungen zur Jar (älter als 1.4.0, Version
+am Dateinamen nicht erkennbar) zeigen sie dem Nutzer schon in Schritt 0 vor dem Weiterarbeiten; die
+Warnung „Spezifikation wurde mit einem neueren Specman gespeichert als die Jar“ liefert
+`sanitize.mjs` im Feld `warnings`, und die Skills zeigen sie im Sanitize-Schritt. Dieselbe Prüfung
+der Jar von Hand:
+
+[source,bash]
+----
+node scripts/resolve-jar.mjs --json
+----
+
+Das Modellformat wird bis Specman 1.4.0 vollständig verstanden (inkl. Meta-Tags, PlantUML-/SVG-Bildern
+und Änderungsmarkierung an Tabellenzellen). Spezifikationen eines noch neueren Specman können
+Konstrukte enthalten, die das Plugin nicht kennt; es weist dann beim Parse-Fehler darauf hin.
 
 == Skills
 
@@ -287,10 +305,12 @@ prüfen (`SPECMAN_JAR` gesetzt voraussetzend):
 
 [source,bash]
 ----
-node scripts/sanitize.mjs --file reference/specman-reference-v1.3-model-v2.nsd --json
+node scripts/sanitize.mjs --file reference/specman-reference-v1.4-model-v2.nsd --json
 ----
 
-Sollte `OK` liefern — der Serializer erzeugt bereits kanonischen Text.
+Sollte `OK` liefern — der Serializer erzeugt bereits kanonischen Text. (Mit gesetztem `SPECMAN_JAR`
+prüft `test/nsd-v14.test.mjs` das automatisch: Referenzdatei parsen, serialisieren, von der echten
+Jar sanitizen lassen.)
 
 Herkunft und Aktualisierung der vendorten Dateien: siehe `VENDORING.md`.
 

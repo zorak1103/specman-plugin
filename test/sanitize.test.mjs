@@ -118,3 +118,25 @@ test('sanitizeUntilStable does not run again after an ERROR', () => {
   assert.equal(r.ok, false);
   assert.equal(runs, 1);
 });
+
+test('readSpecVersion reads specmanVersion from the line-1 envelope', async () => {
+  const { readSpecVersion } = await import('../scripts/sanitize.mjs');
+  assert.equal(
+    readSpecVersion('// {"specmanVersion":"1.4.0","modelType":"specman.model.v002.DiagramModel_V002"}\nsettings {}\n'),
+    '1.4.0',
+  );
+  assert.equal(readSpecVersion('settings {}\n'), null);
+  assert.equal(readSpecVersion('// {not json}\n'), null);
+});
+
+test('attachWarnings adds a warnings array to successful results only when there is something to say', async () => {
+  const { attachWarnings } = await import('../scripts/sanitize.mjs');
+  assert.deepEqual(attachWarnings({ ok: true, status: 'OK' }, []), { ok: true, status: 'OK' });
+  assert.deepEqual(attachWarnings({ ok: true, status: 'OK' }, ['w']), { ok: true, status: 'OK', warnings: ['w'] });
+  assert.deepEqual(attachWarnings({ ok: false, status: 'ERROR', message: 'm' }, ['w']), {
+    ok: false,
+    status: 'ERROR',
+    message: 'm',
+    warnings: ['w'],
+  });
+});

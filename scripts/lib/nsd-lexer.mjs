@@ -22,6 +22,9 @@ const KEYWORDS = new Set([
   'added', 'removed', 'target', // 'source' already listed (step keyword + changeType literal)
   'Changed', 'Steplink', 'ChangedSteplink',
   'Full', 'Co',
+  // Specman 1.4: meta tags (settings.metaTags, tags= on steps) and plantuml/svg image blocks.
+  'metaTags', 'tag', 'tags', 'label', 'background', 'border', 'icon', 'freetext',
+  'plantuml', 'svg', 'backup',
 ]);
 
 const PUNCT = {

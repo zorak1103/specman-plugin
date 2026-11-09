@@ -16,6 +16,24 @@ Klammer-Verschachtelung, Zeichen-Offsets), das Modell entscheidet nur über Inha
 Adressierung. Konstruiere niemals selbst `.nsd`-Syntax von Hand — jede Änderung läuft über die
 `nsd-*`-Skripte unter `${CLAUDE_PLUGIN_ROOT}/scripts/`.
 
+## Schritt 0 — Voraussetzung prüfen: Sanitizer-Jar
+
+Bevor irgendetwas angefasst wird, prüfen, ob die Umgebungsvariable `SPECMAN_JAR` stimmt — der
+Sanitizer-Schritt am Ende scheitert sonst erst nach getaner Arbeit:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json
+```
+
+* `ok: false`: **Stopp.** `error` wörtlich an den Nutzer weitergeben (Variable fehlt, Pfad
+  existiert nicht, zeigt auf ein Verzeichnis oder keine gültige `.jar`) und bitten, `SPECMAN_JAR`
+  auf den vollen Pfad der `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) zu setzen und die
+  Claude-Code-Session neu zu starten. Nicht weiterarbeiten, nicht „später sanitizen".
+* `ok: true` mit nicht-leerem `warnings`: jede Warnung dem Nutzer zeigen (z. B. Jar älter als
+  Specman 1.4.0 oder Version nicht erkennbar) und per `AskUserQuestion` fragen, ob trotzdem
+  weitergemacht werden soll.
+* `ok: true` ohne Warnungen: still weiter zu Schritt 1.
+
 ## Schritt 1 — Zieldatei auflösen
 
 ```
@@ -215,6 +233,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <target> --json
   `steplinkUpdates`, `plainTextFieldsRefreshed`) kurz berichten.
 - `ERROR`: `message` lesen, Ursache beheben (meist ein Fehler in den vorherigen Schritten), erneut
   versuchen. Nie eine fehlerhafte Datei so stehen lassen.
+- `warnings` in der Antwort (bei jedem Status): jede Warnung dem Nutzer zeigen — z. B. dass die
+  Spezifikation mit einem neueren Specman gespeichert wurde als die Jar unter `SPECMAN_JAR`.
 
 ## Schritt 7 — Historieneintrag
 

@@ -16,7 +16,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { isMainModule, report, parseArgs } from './lib/cli.mjs';
-import { resolveJarPath } from './resolve-jar.mjs';
+import { resolveJarPath, specVersionWarning } from './resolve-jar.mjs';
 
 export function parseSanitizeOutput(rawStdout, exitCode) {
   // The real jar prints CRLF line endings on Windows (verified against actual output) — normalize
@@ -102,6 +102,31 @@ export function sanitizeUntilStable(run, readFile) {
   return { ...first, stable: readFile() === afterFirst };
 }
 
+/** Reads specmanVersion from the line-1 `// {...}` envelope; null when absent or unparseable. */
+export function readSpecVersion(text) {
+  const m = text.match(/^\/\/ (\{.*\})\s*$/m);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]).specmanVersion ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Adds a `warnings` array to a result — only when there is something to report. */
+export function attachWarnings(result, warnings) {
+  return warnings.length ? { ...result, warnings } : result;
+}
+
+function plainSummary(r) {
+  if (r.status === 'OK') return 'OK — keine Änderungen.';
+  const parts = [`SANITIZED — ${r.stepNumberChanges.length} Schrittnummer(n) geändert`];
+  if (r.steplinkUpdates.length) parts.push(`${r.steplinkUpdates.length} Steplink(s) aktualisiert`);
+  if (r.plainTextFieldsRefreshed) parts.push(`${r.plainTextFieldsRefreshed} plain=-Feld(er) aufgefrischt`);
+  if (r.stable === false) parts.push('NICHT stabil (zweiter Lauf ändert die Datei erneut)');
+  return parts.join(', ');
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
@@ -113,20 +138,23 @@ function main() {
     report(jar, { json: !!args.json });
     return;
   }
-  const result = sanitizeUntilStable(
-    () => runSanitize(jar.path, args.file),
-    () => readFileSync(args.file, 'utf8'),
+  const warnings = [...jar.warnings];
+  try {
+    const specWarning = specVersionWarning(jar.version, readSpecVersion(readFileSync(args.file, 'utf8')));
+    if (specWarning) warnings.push(specWarning);
+  } catch {
+    // unreadable file: the sanitizer run below reports that error itself
+  }
+  const result = attachWarnings(
+    sanitizeUntilStable(
+      () => runSanitize(jar.path, args.file),
+      () => readFileSync(args.file, 'utf8'),
+    ),
+    warnings,
   );
   report(result, {
     json: !!args.json,
-    plainText: (r) => {
-      if (r.status === 'OK') return 'OK — keine Änderungen.';
-      const parts = [`SANITIZED — ${r.stepNumberChanges.length} Schrittnummer(n) geändert`];
-      if (r.steplinkUpdates.length) parts.push(`${r.steplinkUpdates.length} Steplink(s) aktualisiert`);
-      if (r.plainTextFieldsRefreshed) parts.push(`${r.plainTextFieldsRefreshed} plain=-Feld(er) aufgefrischt`);
-      if (r.stable === false) parts.push('NICHT stabil (zweiter Lauf ändert die Datei erneut)');
-      return parts.join(', ');
-    },
+    plainText: (r) => [plainSummary(r), ...(r.warnings ?? []).map((w) => `WARNUNG: ${w}`)].join('\n'),
   });
 }
 

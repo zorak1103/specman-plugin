@@ -10,6 +10,11 @@
 // source/target linking) are carried through verbatim rather than recomputed.
 
 import { tokenize } from './nsd-lexer.mjs';
+import { compareVersions } from './versions.mjs';
+
+// Newest Specman whose model format (reference/SpecmanModel_V002.g4) this parser fully covers. A file
+// saved by a newer Specman may contain constructs unknown here; see parseDiagram.
+export const SUPPORTED_MODEL_VERSION = '1.4.0';
 
 const STEP_START_KEYWORDS = new Set([
   'simple', 'break', 'source', 'while', 'doWhile', 'ifElse', 'if', 'case', 'subsequence',
@@ -266,6 +271,8 @@ class Parser {
     this.expectKeyword('cell');
     this.expect('LPAREN');
     const head = this.parseHtmlContent();
+    let change;
+    if (this.consumeOptional('change')) change = this.parseChangeParam();
     this.expect('RPAREN');
     let tail = [];
     if (this.at('LBRACE')) {
@@ -273,11 +280,13 @@ class Parser {
       tail = this.parseAreaList();
       this.expect('RBRACE');
     }
-    return { content: { head, tail } };
+    return { content: { head, tail }, change };
   }
 
-  // Image blocks are never interpreted, only round-tripped verbatim (grammar comment: "agents
-  // must ignore image blocks").
+  // Image blocks are never interpreted, only round-tripped verbatim: `raw` holds the block content
+  // exactly as written — a [base64:...] block for png, a backtick string (PlantUML / SVG source) for
+  // plantuml and svg. A plantuml block may carry backup=(changeset, `source`), which Specman
+  // maintains for accept/reject ("agents leave it alone"); kept as backup: { changeset, raw }.
   parseImageBlock() {
     this.expectKeyword('image');
     this.expect('LPAREN');
@@ -292,6 +301,20 @@ class Parser {
     if (this.consumeOptional('change')) change = this.parseChangeParam();
     this.expect('RPAREN');
     this.expect('LBRACE');
+    if (imageType === 'plantuml' || imageType === 'svg') {
+      const raw = this.expect('BACKTICK_STRING').value;
+      let backup;
+      if (imageType === 'plantuml' && this.consumeOptional('backup')) {
+        this.expect('EQUALS');
+        this.expect('LPAREN');
+        const backupChangeset = this.expectIdent();
+        this.expect('COMMA');
+        backup = { changeset: backupChangeset, raw: this.expect('BACKTICK_STRING').value };
+        this.expect('RPAREN');
+      }
+      this.expect('RBRACE');
+      return { kind: 'image', scalePercent, imageType, change, raw, backup };
+    }
     const raw = this.expect('BASE64_BLOCK').value;
     this.expect('RBRACE');
     return { kind: 'image', scalePercent, imageType, change, raw };
@@ -312,15 +335,36 @@ class Parser {
     this.fail('expected a step');
   }
 
-  // Trailing (',' changeParam)? (',' decoParam)? (',' shadeParam)? shared by simple/break and
-  // every structured step type; kept as one helper so the fixed relative order can't drift
-  // between step kinds.
+  // tags=[(`id`), (`id`, `freetext`)] — the meta tags attached to a step (Specman 1.4). Called with
+  // the cursor right after the 'tags' keyword.
+  parseTagsParam() {
+    this.expect('EQUALS');
+    this.expect('LBRACKET');
+    const tags = [this.parseTagRef()];
+    while (this.at('COMMA')) { this.advance(); tags.push(this.parseTagRef()); }
+    this.expect('RBRACKET');
+    return tags;
+  }
+
+  parseTagRef() {
+    this.expect('LPAREN');
+    const tagId = unwrapBacktick(this.expect('BACKTICK_STRING').value);
+    let freetext;
+    if (this.at('COMMA')) { this.advance(); freetext = unwrapBacktick(this.expect('BACKTICK_STRING').value); }
+    this.expect('RPAREN');
+    return { tagId, freetext };
+  }
+
+  // Trailing (',' changeParam)? (',' decoParam)? (',' shadeParam)? (',' tagsParam)? shared by
+  // simple/break and every structured step type; kept as one helper so the fixed relative order
+  // can't drift between step kinds.
   parseChangeDecoShade() {
-    let change, deco, shade;
+    let change, deco, shade, tags;
     if (this.consumeOptional('change')) change = this.parseChangeParam();
     if (this.consumeOptional('deco')) { this.expect('EQUALS'); deco = this.expectIdent(); }
     if (this.consumeOptional('shade')) { this.expect('EQUALS'); shade = this.expect('COLOR_HEX').value; }
-    return { change, deco, shade };
+    if (this.consumeOptional('tags')) tags = this.parseTagsParam();
+    return { change, deco, shade, tags };
   }
 
   parseSimpleOrBreak(kw) {
@@ -331,12 +375,12 @@ class Parser {
     const stepId = this.expect('STEP_ID').value;
     this.expect('COMMA');
     const head = this.parseHtmlContent();
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     let tail = [];
     if (this.at('SEMI')) { this.advance(); }
     else { this.expect('LBRACE'); tail = this.parseAreaList(); this.expect('RBRACE'); }
-    return { kind: kw, stepNum, stepId, content: { head, tail }, change, deco, shade };
+    return { kind: kw, stepNum, stepId, content: { head, tail }, change, deco, shade, tags };
   }
 
   parseSourceStep() {
@@ -351,14 +395,15 @@ class Parser {
     const changeset = this.expectIdent();
     let sourceStep;
     if (this.consumeOptional('sourceStep')) { this.expect('EQUALS'); sourceStep = this.expect('STEP_ID').value; }
-    let deco, shade;
+    let deco, shade, tags;
     if (this.consumeOptional('deco')) { this.expect('EQUALS'); deco = this.expectIdent(); }
     if (this.consumeOptional('shade')) { this.expect('EQUALS'); shade = this.expect('COLOR_HEX').value; }
+    if (this.consumeOptional('tags')) tags = this.parseTagsParam();
     this.expect('RPAREN');
     let tail = [];
     if (this.at('SEMI')) { this.advance(); }
     else { this.expect('LBRACE'); tail = this.parseAreaList(); this.expect('RBRACE'); }
-    return { kind: 'source', stepNum, stepId, content: { head, tail }, changeset, sourceStep, deco, shade };
+    return { kind: 'source', stepNum, stepId, content: { head, tail }, changeset, sourceStep, deco, shade, tags };
   }
 
   parseLoopStep(kw, hasCatchArea) {
@@ -372,7 +417,7 @@ class Parser {
     let barWidth, collapsed;
     if (this.consumeOptional('barWidth')) { this.expect('EQUALS'); barWidth = Number(this.expect('INT').value); }
     if (this.consumeOptional('collapsed')) { this.expect('EQUALS'); this.expectKeyword('true'); collapsed = true; }
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     this.expect('LBRACE');
     const tail = this.parseAreaList();
@@ -381,7 +426,7 @@ class Parser {
     let catchArea;
     if (hasCatchArea && (this.atKeyword('catchArea') || this.atKeyword('catch'))) catchArea = this.parseCatchArea();
     this.expect('RBRACE');
-    return { kind: kw, stepNum, stepId, content: { head, tail }, barWidth, collapsed, change, deco, shade, body, catchArea };
+    return { kind: kw, stepNum, stepId, content: { head, tail }, barWidth, collapsed, change, deco, shade, tags, body, catchArea };
   }
 
   parseIfElseStep() {
@@ -395,14 +440,14 @@ class Parser {
     let ifRatio, collapsed;
     if (this.consumeOptional('ifRatio')) { this.expect('EQUALS'); ifRatio = this.expect('PERCENT').value; }
     if (this.consumeOptional('collapsed')) { this.expect('EQUALS'); this.expectKeyword('true'); collapsed = true; }
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     this.expect('LBRACE');
     const tail = this.parseAreaList();
     const ifBranch = this.parseBranch('if_branch', true);
     const elseBranch = this.parseBranch('else_branch', true);
     this.expect('RBRACE');
-    return { kind: 'ifElse', stepNum, stepId, content: { head, tail }, ifRatio, collapsed, change, deco, shade, ifBranch, elseBranch };
+    return { kind: 'ifElse', stepNum, stepId, content: { head, tail }, ifRatio, collapsed, change, deco, shade, tags, ifBranch, elseBranch };
   }
 
   parseIfStep() {
@@ -416,13 +461,13 @@ class Parser {
     let emptyWidth, collapsed;
     if (this.consumeOptional('emptyWidth')) { this.expect('EQUALS'); emptyWidth = Number(this.expect('INT').value); }
     if (this.consumeOptional('collapsed')) { this.expect('EQUALS'); this.expectKeyword('true'); collapsed = true; }
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     this.expect('LBRACE');
     const tail = this.parseAreaList();
     const ifBranch = this.parseBranch('if_branch', true);
     this.expect('RBRACE');
-    return { kind: 'if', stepNum, stepId, content: { head, tail }, emptyWidth, collapsed, change, deco, shade, ifBranch };
+    return { kind: 'if', stepNum, stepId, content: { head, tail }, emptyWidth, collapsed, change, deco, shade, tags, ifBranch };
   }
 
   parseCaseStep() {
@@ -436,7 +481,7 @@ class Parser {
     let cols, collapsed;
     if (this.consumeOptional('cols')) { this.expect('EQUALS'); this.expect('LBRACKET'); cols = this.parsePercentList(); this.expect('RBRACKET'); }
     if (this.consumeOptional('collapsed')) { this.expect('EQUALS'); this.expectKeyword('true'); collapsed = true; }
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     this.expect('LBRACE');
     const tail = this.parseAreaList();
@@ -444,7 +489,7 @@ class Parser {
     const caseBranches = [];
     while (this.atKeyword('case_branch')) caseBranches.push(this.parseBranch('case_branch', false));
     this.expect('RBRACE');
-    return { kind: 'case', stepNum, stepId, content: { head, tail }, cols, collapsed, change, deco, shade, defaultBranch, caseBranches };
+    return { kind: 'case', stepNum, stepId, content: { head, tail }, cols, collapsed, change, deco, shade, tags, defaultBranch, caseBranches };
   }
 
   parseSubsequenceStep() {
@@ -458,7 +503,7 @@ class Parser {
     let flat, collapsed;
     if (this.consumeOptional('flat')) { this.expect('EQUALS'); this.expectKeyword('true'); flat = true; }
     if (this.consumeOptional('collapsed')) { this.expect('EQUALS'); this.expectKeyword('true'); collapsed = true; }
-    const { change, deco, shade } = this.parseChangeDecoShade();
+    const { change, deco, shade, tags } = this.parseChangeDecoShade();
     this.expect('RPAREN');
     this.expect('LBRACE');
     const tail = this.parseAreaList();
@@ -467,7 +512,7 @@ class Parser {
     let catchArea;
     if (this.atKeyword('catchArea') || this.atKeyword('catch')) catchArea = this.parseCatchArea();
     this.expect('RBRACE');
-    return { kind: 'subsequence', stepNum, stepId, content: { head, tail }, flat, collapsed, change, deco, shade, body, catchArea };
+    return { kind: 'subsequence', stepNum, stepId, content: { head, tail }, flat, collapsed, change, deco, shade, tags, body, catchArea };
   }
 
   parseBranch(kw, hasCatchArea) {
@@ -553,8 +598,9 @@ class Parser {
   parseSettings() {
     this.expectKeyword('settings');
     this.expect('LBRACE');
-    let width, zoom, changeModeEnabled, changeSetName, pdfOptions;
+    let width, zoom, changeModeEnabled, changeSetName, pdfOptions, metaTags;
     while (!this.at('RBRACE')) {
+      if (this.atKeyword('metaTags')) { this.advance(); metaTags = this.parseMetaTags(); continue; }
       if (this.atKeyword('width')) { this.advance(); this.expect('EQUALS'); width = Number(this.expect('INT').value); continue; }
       if (this.atKeyword('zoom')) { this.advance(); this.expect('EQUALS'); zoom = Number(this.expect('INT').value); continue; }
       if (this.atKeyword('changeModeEnabled')) { this.advance(); this.expect('EQUALS'); changeModeEnabled = this.expectBool(); continue; }
@@ -563,7 +609,37 @@ class Parser {
       this.fail('unexpected entry in settings block');
     }
     this.expect('RBRACE');
-    return { width, zoom, changeModeEnabled, changeSetName, pdfOptions };
+    return { width, zoom, changeModeEnabled, changeSetName, pdfOptions, metaTags };
+  }
+
+  // metaTags { tag(...)+ } — the tag configurations steps refer to by tagId (Specman 1.4).
+  // Called with the cursor right after the 'metaTags' keyword.
+  parseMetaTags() {
+    this.expect('LBRACE');
+    const tags = [this.parseMetaTagConfig()];
+    while (this.atKeyword('tag')) tags.push(this.parseMetaTagConfig());
+    this.expect('RBRACE');
+    return tags;
+  }
+
+  // tag(`id`, background=#rrggbb[aa] [, border=#rrggbb[aa]], (label=`..` [, icon=`..`] | icon=`..`)
+  //     [, freetext=false])
+  parseMetaTagConfig() {
+    this.expectKeyword('tag');
+    this.expect('LPAREN');
+    const tagId = unwrapBacktick(this.expect('BACKTICK_STRING').value);
+    this.expect('COMMA');
+    this.expectKeyword('background');
+    this.expect('EQUALS');
+    const background = this.expect('COLOR_HEX').value;
+    let border, label, icon, freetext;
+    if (this.consumeOptional('border')) { this.expect('EQUALS'); border = this.expect('COLOR_HEX').value; }
+    if (this.consumeOptional('label')) { this.expect('EQUALS'); label = unwrapBacktick(this.expect('BACKTICK_STRING').value); }
+    if (this.consumeOptional('icon')) { this.expect('EQUALS'); icon = unwrapBacktick(this.expect('BACKTICK_STRING').value); }
+    if (label === undefined && icon === undefined) this.fail("a tag needs a 'label' or an 'icon'");
+    if (this.consumeOptional('freetext')) { this.expect('EQUALS'); this.expectKeyword('false'); freetext = false; }
+    this.expect('RPAREN');
+    return { tagId, background, border, label, icon, freetext };
   }
 
   parsePdfOptions() {
@@ -624,8 +700,19 @@ export function parseDiagram(text) {
       'text format. Open it in Specman 1.3.0+ and save it once to upgrade before editing it here.',
     );
   }
-  const tokens = tokenize(text);
-  return new Parser(tokens).parseTopDiagram(envelope);
+  try {
+    return new Parser(tokenize(text)).parseTopDiagram(envelope);
+  } catch (err) {
+    // A file saved by a Specman newer than the model format this parser knows may legitimately
+    // contain constructs it has never seen — say so instead of leaving a bare parse error.
+    const v = envelope.specmanVersion;
+    if (v && compareVersions(v, SUPPORTED_MODEL_VERSION) > 0) {
+      err.message +=
+        ` (the file was saved by Specman ${v}, but this plugin only knows the model format up to ` +
+        `Specman ${SUPPORTED_MODEL_VERSION} — update the plugin)`;
+    }
+    throw err;
+  }
 }
 
 // ============================================================
@@ -649,10 +736,18 @@ function changeParamText(c) {
   return `change=(${c.kind}, ${c.changeset}${src})`;
 }
 
+// A backtick would end the BACKTICK_STRING token; Specman itself writes an apostrophe instead.
+function tagRefText(tag) {
+  const free = tag.freetext !== undefined ? `, ${wrapBacktick(tag.freetext.replaceAll('`', "'"))}` : '';
+  return `(${wrapBacktick(tag.tagId)}${free})`;
+}
+
+// The fixed-order tail of a step header after change=/modifiers: deco, shade, tags.
 function decoShadeParts(node) {
   const parts = [];
   if (node.deco !== undefined) parts.push(`deco=${node.deco}`);
   if (node.shade !== undefined) parts.push(`shade=${node.shade}`);
+  if (node.tags && node.tags.length > 0) parts.push(`tags=[${node.tags.map(tagRefText).join(', ')}]`);
   return parts;
 }
 
@@ -715,7 +810,9 @@ class Serializer {
   }
 
   tableCellText(cell) {
-    const head = `cell(${htmlContentText(cell.content.head)})`;
+    const parts = [htmlContentText(cell.content.head)];
+    if (cell.change) parts.push(changeParamText(cell.change));
+    const head = `cell(${parts.join(', ')})`;
     if (cell.content.tail.length === 0) return head;
     const inner = new Serializer();
     inner.indentLevel = this.indentLevel + 1;
@@ -727,7 +824,7 @@ class Serializer {
     const parts = [`scale=${area.scalePercent}`, `type=${area.imageType}`];
     if (area.change) parts.push(changeParamText(area.change));
     this.open(`image(${parts.join(', ')}) {`);
-    this.line(area.raw);
+    this.line(area.backup ? `${area.raw}, backup=(${area.backup.changeset}, ${area.backup.raw})` : area.raw);
     this.close();
   }
 
@@ -895,6 +992,18 @@ class Serializer {
       if (p.pageSize !== undefined) this.line(`pageSize=${p.pageSize}`);
       if (p.portrait !== undefined) this.line(`portrait=${p.portrait}`);
       if (p.paging !== undefined) this.line(`paging=${p.paging}`);
+      this.close();
+    }
+    if (settings.metaTags && settings.metaTags.length > 0) {
+      this.open('metaTags {');
+      for (const t of settings.metaTags) {
+        const parts = [wrapBacktick(t.tagId), `background=${t.background}`];
+        if (t.border !== undefined) parts.push(`border=${t.border}`);
+        if (t.label !== undefined) parts.push(`label=${wrapBacktick(t.label)}`);
+        if (t.icon !== undefined) parts.push(`icon=${wrapBacktick(t.icon)}`);
+        if (t.freetext === false) parts.push('freetext=false');
+        this.line(`tag(${parts.join(', ')})`);
+      }
       this.close();
     }
     this.close();

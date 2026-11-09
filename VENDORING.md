@@ -15,8 +15,13 @@ Upstream-Projekt umlizenziert.
 
 | Datei hier | Upstream-Pfad | Bezogen am |
 |---|---|---|
-| `reference/SpecmanModel_V002.g4` | `src/main/antlr4/specman/model/v002/SpecmanModel_V002.g4` | 2026-09-16 |
+| `reference/SpecmanModel_V002.g4` | `src/main/antlr4/specman/model/v002/SpecmanModel_V002.g4` | 2026-11-09 (Specman 1.4.0) |
+| `reference/specman-reference-v1.4-model-v2.nsd` | `specman-reference-v1.4-model-v2.nsd` (Repo-Root, Tag `v1.4.0`) | 2026-11-09 |
 | `reference/specman-reference-v1.3-model-v2.nsd` | `specman-reference-v1.3-model-v2.nsd` (Repo-Root) | 2026-09-16 |
+
+Die 1.3-Referenz bleibt als Regressionsfixture erhalten: Dateien, die noch mit Specman 1.3 gespeichert
+wurden, müssen weiter parsen. Beim nächsten Update die neue Referenz **hinzufügen**, nicht die alte
+ersetzen.
 
 `reference/suc-template.nsd` ist **keine Upstream-Datei** — sie ist projekteigen (abgeleitet aus
 `suc-template.nsd`, ursprünglich im alten V001-JSON-Format, von Hand einmal in Specman 1.3.0
@@ -25,7 +30,7 @@ Datei: in Specman öffnen, prüfen, speichern, dann hierher kopieren — kein Be
 
 ## Was bewusst NICHT vendort wird
 
-- Die Sanitizer-Jar (`specman-*-jar-with-dependencies.jar`, ~48–50 MB) — zu groß fürs Git-Repo.
+- Die Sanitizer-Jar (`specman-*-jar-with-dependencies.jar`, ~50–70 MB) — zu groß fürs Git-Repo.
   Nutzer:innen stellen den Pfad über die Environment-Variable `SPECMAN_JAR` bereit (siehe
   `README.adoc`).
 - `gutenmorgen.nsd` — persönliches Scratch-File aus der lokalen Specman-Installation, kein
@@ -39,8 +44,8 @@ Datei: in Specman öffnen, prüfen, speichern, dann hierher kopieren — kein Be
 1. Neue Version der Grammatik/Referenz/Jar aus `github.com/j-specman/specman`
    beziehen (lokal z. B. unter `C:\Users\<user>\Desktop\specman-installation\` oder per
    `git clone`/`git pull` auf `github.com/j-specman/specman`).
-2. `reference/SpecmanModel_V002.g4` und `reference/specman-reference-v1.3-model-v2.nsd` durch die
-   neuen Versionen ersetzen.
+2. `reference/SpecmanModel_V002.g4` durch die neue Version ersetzen und die neue
+   `specman-reference-vX.Y-model-v2.nsd` neben die vorhandenen Referenzen legen.
 3. `diff` gegen die vorherige Version laufen lassen — jede neue Grammatik-Produktion,
    jedes neue optionale Attribut kann `scripts/lib/nsd-ast.mjs` betreffen (Parser **und**
    Serializer, siehe deren Kommentare zu Produktions-Abdeckung). Insbesondere prüfen:

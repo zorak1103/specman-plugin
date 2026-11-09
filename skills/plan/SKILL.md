@@ -15,6 +15,24 @@ Baut eine neue Spezifikation in zwei Phasen: erst ein Interview mit einer privat
 Arbeits-Outline (nie zur Freigabe vorgelegt), dann Erzeugung und Sanitizing der eigentlichen
 `.nsd`-Datei (die einzige Freigabe-relevante Ausgabe).
 
+## Schritt 0 — Voraussetzung prüfen: Sanitizer-Jar
+
+Bevor irgendetwas angefasst wird, prüfen, ob die Umgebungsvariable `SPECMAN_JAR` stimmt — der
+Sanitizer-Schritt am Ende scheitert sonst erst nach getaner Arbeit:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-jar.mjs" --json
+```
+
+* `ok: false`: **Stopp.** `error` wörtlich an den Nutzer weitergeben (Variable fehlt, Pfad
+  existiert nicht, zeigt auf ein Verzeichnis oder keine gültige `.jar`) und bitten, `SPECMAN_JAR`
+  auf den vollen Pfad der `specman-*-jar-with-dependencies.jar` (Specman 1.4.0+) zu setzen und die
+  Claude-Code-Session neu zu starten. Nicht weiterarbeiten, nicht „später sanitizen".
+* `ok: true` mit nicht-leerem `warnings`: jede Warnung dem Nutzer zeigen (z. B. Jar älter als
+  Specman 1.4.0 oder Version nicht erkennbar) und per `AskUserQuestion` fragen, ob trotzdem
+  weitergemacht werden soll.
+* `ok: true` ohne Warnungen: still weiter zu Schritt 1.
+
 ## Schritt 1 — Zielordner und Nummer
 
 Ordner vom Nutzer erfragen, falls nicht über `--dir` gegeben (der projektspezifische Spec-Ordner,
@@ -139,7 +157,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize.mjs" --file <datei> --json
 ```
 
 Bei `ERROR`: Ursache beheben, erneut versuchen. Bei `OK`/`SANITIZED`: Outline-Datei aus Schritt 4
-löschen.
+löschen. Enthält die Antwort ein `warnings`-Array (z. B. Jar älter als Specman 1.4.0), jede
+Warnung dem Nutzer zeigen.
 
 ## Schritt 8 — Zusammenfassung zur Freigabe
 

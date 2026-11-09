@@ -8,7 +8,7 @@
       "name": "specman",
       "source": "./",
       "description": "Erstellt und bearbeitet Specman-Spezifikationen (.nsd, SUCs), migriert Word-Spezifikationen (.docx) nach .nsd und implementiert bzw. synchronisiert Code auf ihrer Basis.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "development"
     }
   ],

@@ -177,14 +177,15 @@ node scripts/nsd-plantuml.mjs --file <file> --step <id> --op insert --position e
 
 * `get` prints the source (plus scale, change mark and backup) and never writes; `set` replaces the
   complete source of an existing diagram; `insert` adds a new one (`--position start|end|after:tail[i]`,
-  default `end`; `--scale` 1-100, default 100). `--source-file` takes a path or `-` for stdin.
+  default `end`; `--scale` 1-100, default 100; both apply to `insert` only, `get`/`set` refuse them). `--source-file` takes a path or `-` for stdin.
 * Specman 1.4.0+ specs only; older ones are refused (open and save them once in Specman 1.4.0+).
 * The source must start with `@start…` and end with `@end…`; a source containing a backtick is
   refused, because the `.nsd` format has no escape for it.
 * Change tracking: the grammar has no "changed" change type for areas, so a tracked
   `set --changeset <cs>` records the old source as `backup=(<cs>, old source)` instead of a `change=`
-  mark. An untracked `set` leaves an existing `change=`/`backup=` alone. A diagram marked `removed`,
-  or carrying a backup for a different changeset, refuses a tracked `set`. `insert --changeset`
+  mark. The sanitizer accepts this; that Specman's accept/reject restores the old source from a
+  plugin-written `backup=` has not yet been confirmed in the GUI. An untracked `set` leaves an existing `change=`/`backup=` alone. A diagram marked `removed`
+  (even with a backup), or carrying a backup for a different changeset, refuses a tracked `set`. `insert --changeset`
   marks the new diagram `change=(added, <cs>)`.
 * `insert` shifts the `tail[n]` keys of later areas; re-run `nsd-locate.mjs`.
 * Rendering and PlantUML syntax checking remain Specman's job. SVG and PNG blocks are not edited

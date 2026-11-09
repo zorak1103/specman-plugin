@@ -99,7 +99,7 @@ business rules, `Akzeptanzkriterien` = acceptance criteria). Use the headings ex
   (the main context already carries a lot of unrelated history): `Agent
   (specman:specman-nsd-editor)` with a concise, fully worded task — file, the exact `key` values
   from Step 2, and the desired new content (for a PlantUML diagram: the complete final source,
-written by you beforehand). The subagent makes no design decisions, only
+  written by you beforehand). The subagent makes no design decisions, only
   executes.
 
 ## Step 4 — Apply the change
@@ -202,17 +202,19 @@ verbatim). `--block` is accepted as an alias of `--step`.
   and `backupWritten`. Never invent diagram content beyond what the user asked for.
 * The source must start with `@start…` and end with `@end…` (e.g. `@startuml` … `@enduml`) and
   must not contain a backtick — the `.nsd` format has no escape for it, so the script refuses it.
-* `set --changeset <cs>` keeps the old source as `backup=(<cs>, old source)` so that Specman can
-  accept or reject the change; it does **not** write a `change=` mark (the grammar has no
-  "changed" change type for areas). An untracked `set` (no `--changeset`) overwrites the source
+* `set --changeset <cs>` keeps the old source as `backup=(<cs>, old source)`; it does **not** write a
+  `change=` mark (the grammar has no "changed" change type for areas). The sanitizer accepts this;
+  that Specman's accept/reject restores the old source from a plugin-written `backup=` has not yet
+  been confirmed in the GUI. Pass `--changeset` (`settings.changeSetName` from Step 2) only when
+  tracking is active. An untracked `set` (no `--changeset`) overwrites the source
   and leaves any existing `change=`/`backup=` as it is. A tracked `set` is refused for a diagram
-  marked `removed` and for one that already carries a backup for a different changeset; a repeat
+  marked `removed` (even if it carries a backup) and for one that already carries a backup for a different changeset; a repeat
   `set` for the same changeset keeps the existing backup, and so does a diagram that is
   `added` in this very changeset (nothing to restore).
 * `insert` adds a new diagram (default `--position end`, `--scale 100`; scale is a percentage in
   (0, 100]) and returns the new `areaKey`. With `--changeset <cs>` it is marked
   `change=(added, <cs>)`. Use the changeset from Step 2 (`settings.changeSetName`) when tracking
-  is active.
+  is active. `--scale` and `--position` apply to `insert` only; `get` and `set` refuse them.
 * `insert` shifts the `tail[n]` keys of every later area — re-run `nsd-locate.mjs --step <id>`
   before addressing the tail again.
 * Specs saved by a Specman older than 1.4.0 are refused: tell the user to open and save the spec

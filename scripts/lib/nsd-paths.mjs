@@ -140,7 +140,7 @@ export function findStep(ast, selector) {
  * Lists every addressable text-bearing area under a step's content: the head, each tail area
  * (a plain `text(...)` area, each list item, each table cell), and — for structured steps — each
  * branch heading (`if_branch`/`else_branch`/`default_branch`/`case_branch`). Image areas are
- * intentionally excluded — this plugin never edits image content, only passes it through.
+ * intentionally excluded — image content other than PlantUML source is never edited, only passed through (PlantUML source is edited by nsd-plantuml.mjs, not through this list).
  */
 export function addressableAreas(step) {
   const out = [];
@@ -192,7 +192,7 @@ export function addressableAreas(step) {
  * inside one that already exists (that's `addressableAreas`/`resolveArea`). Kind-specific extras:
  * `list` → `ordered`, `itemCount`; `table` → `rowCount`, `colCount`; `image` → `imageType`
  * (`png` | `plantuml` | `svg`), so callers can find PlantUML diagrams. Image areas are reported
- * with their `imageType` only — this module never exposes or edits image content.
+ * with their `imageType` only — this module never exposes or edits image content (PlantUML source is read and written by nsd-plantuml.mjs).
  */
 export function listTailAreas(step) {
   return step.content.tail.map((area, i) => {

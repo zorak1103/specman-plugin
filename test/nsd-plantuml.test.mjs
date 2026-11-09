@@ -278,3 +278,168 @@ test('set: never mutates its input and changes nothing but the addressed area', 
   assert.equal(input, copy);
   assert.equal(r.text.replace('A -> C', 'A -> B'), serializeDiagram(parseDiagram(input)));
 });
+
+// ---------------------------------------------------------------- insert
+
+const INS_SOURCE = '@startuml\nX -> Y\n@enduml';
+const INS_RAW = '`@startuml\nX -> Y\n@enduml`';
+
+function insOpts(extra = {}) {
+  return { op: 'insert', stepSelector: '5582897d', source: INS_SOURCE, ...extra };
+}
+
+// A 1.4.0 spec with an intro and an outro block, each carrying one text area, plus one step.
+function diagramWithBlocks() {
+  return (
+    `${ENVELOPE_14}settings {\n    width=700\n}\n\n` +
+    'intro(`i`, plain=`i`) {\n    text(`intro text`, plain=`intro text`)\n}\n\n' +
+    'mainSequence {\n    simple(1, 5582897d, `s`, plain=`s`);\n}\n\n' +
+    'outro(`o`, plain=`o`) {\n    text(`outro text`, plain=`outro text`)\n}\n'
+  );
+}
+
+function blockTail(text, name) {
+  return parseDiagram(text)[name].tail;
+}
+
+test('insert: defaults to the end, 100% and no change mark or backup', () => {
+  const r = applyPlantuml(diagram14(), insOpts());
+  assert.equal(r.ok, true);
+  assert.equal(r.areaKey, 'tail[4]');
+  const area = tailOf(r.text, 4);
+  assert.equal(area.kind, 'image');
+  assert.equal(area.imageType, 'plantuml');
+  assert.equal(area.scalePercent, '100%');
+  assert.equal(area.change, undefined);
+  assert.equal(area.backup, undefined);
+  assert.equal(area.raw, INS_RAW);
+});
+
+test('insert: scalePercent 50 is stored as 50%', () => {
+  const r = applyPlantuml(diagram14(), insOpts({ scalePercent: 50 }));
+  assert.equal(r.ok, true);
+  assert.equal(tailOf(r.text, 4).scalePercent, '50%');
+});
+
+test('insert: a percentage outside (0, 100] or not a number is refused', () => {
+  for (const scalePercent of [0, 101, -5, NaN]) {
+    const r = applyPlantuml(diagram14(), insOpts({ scalePercent }));
+    assert.equal(r.ok, false, String(scalePercent));
+    assert.match(r.error, /percentage/, String(scalePercent));
+    assert.equal('text' in r, false);
+  }
+});
+
+test('insert: position start goes to tail[0]', () => {
+  const r = applyPlantuml(diagram14(), insOpts({ position: 'start' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.areaKey, 'tail[0]');
+  assert.equal(tailOf(r.text, 0).raw, INS_RAW);
+  assert.equal(tailOf(r.text, 1).kind, 'text');
+});
+
+test('insert: position after:tail[1] lands at tail[2] and shifts the following areas', () => {
+  const before = tailOf(diagram14(), 2);
+  const r = applyPlantuml(diagram14(), insOpts({ position: 'after:tail[1]' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.areaKey, 'tail[2]');
+  assert.equal(tailOf(r.text, 2).raw, INS_RAW);
+  assert.deepEqual(tailOf(r.text, 3), before);
+});
+
+test('insert: a non-existent after index and an invalid position are refused', () => {
+  const missing = applyPlantuml(diagram14(), insOpts({ position: 'after:tail[9]' }));
+  assert.equal(missing.ok, false);
+  assert.match(missing.error, /non-existent index/);
+  assert.equal('text' in missing, false);
+  const invalid = applyPlantuml(diagram14(), insOpts({ position: 'middle' }));
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.error, /invalid position/);
+  assert.equal('text' in invalid, false);
+});
+
+test('insert: with a changeset the area carries an added change mark and no backup', () => {
+  const r = applyPlantuml(diagram14(), insOpts({ changeset: 'blue' }));
+  assert.equal(r.ok, true);
+  const area = tailOf(r.text, 4);
+  assert.deepEqual(area.change, { kind: 'added', changeset: 'blue', sourceStep: undefined });
+  assert.equal(area.backup, undefined);
+});
+
+test('insert: works on the intro and the outro block', () => {
+  for (const name of ['intro', 'outro']) {
+    const r = applyPlantuml(diagramWithBlocks(), insOpts({ stepSelector: name }));
+    assert.equal(r.ok, true, name);
+    assert.equal(r.areaKey, 'tail[1]', name);
+    const tail = blockTail(r.text, name);
+    assert.equal(tail.length, 2, name);
+    assert.equal(tail[1].imageType, 'plantuml', name);
+    assert.equal(tail[1].raw, INS_RAW, name);
+  }
+});
+
+test('insert: a spec older than Specman 1.4.0 is refused', () => {
+  const r = applyPlantuml(readFileSync(templatePath, 'utf8'), insOpts({ stepSelector: 'intro' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Specman 1\.4\.0/);
+  assert.equal('text' in r, false);
+});
+
+test('insert: a backtick in the source, a bad source and a missing source are refused', () => {
+  const tick = applyPlantuml(diagram14(), insOpts({ source: '@startuml\nA -> `B`\n@enduml' }));
+  assert.equal(tick.ok, false);
+  assert.match(tick.error, /backtick/);
+  const bad = applyPlantuml(diagram14(), insOpts({ source: 'hello' }));
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /@start/);
+  const none = applyPlantuml(diagram14(), { op: 'insert', stepSelector: '5582897d' });
+  assert.equal(none.ok, false);
+  assert.match(none.error, /--source-file/);
+});
+
+test('insert: an unknown step is reported', () => {
+  const r = applyPlantuml(diagram14(), insOpts({ stepSelector: 'deadbeef' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Step not found/);
+});
+
+test('insert: CRLF and surrounding whitespace in the source are normalised', () => {
+  const r = applyPlantuml(diagram14(), insOpts({ source: '\r\n @startuml\r\nX -> Y\r\n@enduml \r\n' }));
+  assert.equal(r.ok, true);
+  assert.equal(tailOf(r.text, 4).raw, INS_RAW);
+});
+
+test('insert: results round-trip through parse and serialize', () => {
+  const variants = [insOpts(), insOpts({ position: 'start', scalePercent: 25 }), insOpts({ position: 'after:tail[0]', changeset: 'blue' })];
+  for (const opts of variants) {
+    const r = applyPlantuml(diagram14(), opts);
+    assert.equal(r.ok, true);
+    assert.equal(serializeDiagram(parseDiagram(r.text)), r.text);
+  }
+  for (const name of ['intro', 'outro']) {
+    const r = applyPlantuml(diagramWithBlocks(), insOpts({ stepSelector: name, changeset: 'blue' }));
+    assert.equal(serializeDiagram(parseDiagram(r.text)), r.text);
+  }
+});
+
+test('insert: never mutates its input', () => {
+  const input = diagram14();
+  const copy = String(input);
+  applyPlantuml(input, insOpts());
+  assert.equal(input, copy);
+});
+
+// ---------------------------------------------------------------- changeset validation
+
+test('a changeset that is not a non-empty string is refused for set and insert, naming --changeset', () => {
+  for (const changeset of [true, '', 5]) {
+    const set = applyPlantuml(diagram14(), setOpts({ changeset }));
+    assert.equal(set.ok, false, `set ${String(changeset)}`);
+    assert.match(set.error, /--changeset/);
+    assert.equal('text' in set, false);
+    const ins = applyPlantuml(diagram14(), insOpts({ changeset }));
+    assert.equal(ins.ok, false, `insert ${String(changeset)}`);
+    assert.match(ins.error, /--changeset/);
+    assert.equal('text' in ins, false);
+  }
+});

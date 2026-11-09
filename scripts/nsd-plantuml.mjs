@@ -5,7 +5,7 @@
 //
 //   get     prints the source of one PlantUML area (plus scale, change mark and backup); never writes.
 //   set     replaces the source of an existing PlantUML area; with --changeset the old source is kept as `backup=`.
-//   insert  adds a new PlantUML area at a position in the tail.          (not implemented yet)
+//   insert  adds a new PlantUML area at a position in the tail; with --changeset it is marked `change=(added, <cs>)`.
 //
 // Areas are addressed by their tail key (`tail[<i>]`, as listed by nsd-locate / nsd-tail-areas). The
 // source is the PlantUML text without the surrounding backticks; with `get` it comes back with `\n`
@@ -81,6 +81,41 @@ export function normalizeSource(source) {
   return normalized;
 }
 
+/** Resolves an insert position (`start`, `end` or `after:tail[<i>]`) to an index in a tail of `length` areas. */
+function insertIndex(position, length) {
+  if (position === 'start') return 0;
+  if (position === 'end') return length;
+  const m = typeof position === 'string' && position.match(/^after:tail\[(\d+)\]$/);
+  if (!m) throw new Error(`nsd-plantuml: invalid position '${position}' (expected: start, end, or after:tail[<i>]).`);
+  const after = Number(m[1]);
+  if (!(after >= 0 && after < length)) {
+    throw new Error(`nsd-plantuml: position '${position}' refers to a non-existent index (0..${length - 1}).`);
+  }
+  return after + 1;
+}
+
+/** Same rule as `percent()` in lib/nsd-areas.mjs: a number in (0, 100]. Returns the `<n>%` string. */
+function scaleString(scalePercent) {
+  if (typeof scalePercent !== 'number' || !Number.isFinite(scalePercent) || scalePercent <= 0 || scalePercent > 100) {
+    throw new Error(`nsd-plantuml: invalid percentage '${scalePercent}' (expected a number in (0, 100]).`);
+  }
+  return `${scalePercent}%`;
+}
+
+/**
+ * Inserts a new PlantUML area into the tail at `position`. With a changeset it carries
+ * `change=(added, <changeset>)` (no backup: there is nothing to restore). Returns `{ areaKey }`.
+ */
+function insertArea(found, source, position, scalePercent, changeset) {
+  const raw = `\`${normalizeSource(source)}\``;
+  const scale = scaleString(scalePercent);
+  const tail = found.step.content.tail;
+  const index = insertIndex(position, tail.length);
+  const change = changeset ? { kind: 'added', changeset, sourceStep: undefined } : undefined;
+  tail.splice(index, 0, { kind: 'image', scalePercent: scale, imageType: 'plantuml', change, raw });
+  return { areaKey: `tail[${index}]` };
+}
+
 /**
  * Replaces the source of a PlantUML area in the parsed AST. With a changeset the old raw is kept as
  * `backup` unless one for the same changeset exists or the area is new in this changeset.
@@ -108,11 +143,15 @@ function setArea(found, areaKey, source, changeset) {
   return { areaKey: `tail[${index}]`, backupWritten };
 }
 
-export function applyPlantuml(text, { op, stepSelector, areaKey, source, changeset } = {}) {
+export function applyPlantuml(text, { op, stepSelector, areaKey, source, position = 'end', scalePercent = 100, changeset } = {}) {
   if (!OPS.includes(op)) {
     return { ok: false, error: `nsd-plantuml: unknown --op '${op}' (expected: ${OPS.join(', ')}).` };
   }
   try {
+    // parseArgs yields `true` for a bare `--changeset`; refuse anything but a non-empty name up front.
+    if (changeset !== undefined && (typeof changeset !== 'string' || changeset === '')) {
+      throw new Error('nsd-plantuml: --changeset needs a non-empty changeset name.');
+    }
     const ast = parseDiagram(text);
     requireV14(ast);
     const found = resolveTarget(ast, stepSelector);
@@ -122,7 +161,8 @@ export function applyPlantuml(text, { op, stepSelector, areaKey, source, changes
       const done = setArea(found, areaKey, source, changeset);
       return { ok: true, text: serializeDiagram(ast), ...done };
     }
-    return { ok: false, error: `nsd-plantuml: --op ${op} is not implemented yet.` };
+    const done = insertArea(found, source, position, scalePercent, changeset);
+    return { ok: true, text: serializeDiagram(ast), ...done };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -155,7 +195,7 @@ function main() {
   const { text: _written, ...printable } = result;
   report(result.ok ? printable : result, {
     json,
-    plainText: (r) => (args.op === 'get' ? r.source : `PlantUML area ${r.areaKey} updated.`),
+    plainText: (r) => (args.op === 'get' ? r.source : `PlantUML area ${r.areaKey} ${args.op === 'insert' ? 'inserted' : 'updated'}.`),
   });
 }
 

@@ -140,7 +140,7 @@ export function findStep(ast, selector) {
  * Lists every addressable text-bearing area under a step's content: the head, each tail area
  * (a plain `text(...)` area, each list item, each table cell), and — for structured steps — each
  * branch heading (`if_branch`/`else_branch`/`default_branch`/`case_branch`). Image areas are
- * intentionally excluded — this plugin never edits image content, only passes it through.
+ * intentionally excluded — image content other than PlantUML source is never edited, only passed through (PlantUML source is edited by nsd-plantuml.mjs, not through this list).
  */
 export function addressableAreas(step) {
   const out = [];
@@ -190,9 +190,9 @@ export function addressableAreas(step) {
  * Lists every top-level tail area of a step's content as `{ key, kind, ... }`, for callers that
  * need to insert/append/remove whole areas (table/list/text blocks) rather than replace text
  * inside one that already exists (that's `addressableAreas`/`resolveArea`). Kind-specific extras:
- * `list` → `ordered`, `itemCount`; `table` → `rowCount`, `colCount`. `image` areas are reported
- * (so callers can see they exist and skip them) but carry no further detail — this plugin never
- * edits image content.
+ * `list` → `ordered`, `itemCount`; `table` → `rowCount`, `colCount`; `image` → `imageType`
+ * (`png` | `plantuml` | `svg`), so callers can find PlantUML diagrams. Image areas are reported
+ * with their `imageType` only — this module never exposes or edits image content (PlantUML source is read and written by nsd-plantuml.mjs).
  */
 export function listTailAreas(step) {
   return step.content.tail.map((area, i) => {
@@ -203,7 +203,7 @@ export function listTailAreas(step) {
       const colCount = area.rows[0]?.cells.length ?? 0;
       return { key, kind: 'table', rowCount: area.rows.length, colCount };
     }
-    if (area.kind === 'image') return { key, kind: 'image' };
+    if (area.kind === 'image') return { key, kind: 'image', imageType: area.imageType };
     throw new Error(`nsd-paths: unknown area kind '${area.kind}'`);
   });
 }

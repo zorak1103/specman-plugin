@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { parseDiagram } from '../scripts/lib/nsd-ast.mjs';
 import { findStep, listTailAreas, resolveTailContainer } from '../scripts/lib/nsd-paths.mjs';
 
-function minimalDiagram(mainSequenceBody) {
+function minimalDiagram(mainSequenceBody, specmanVersion = '1.3.0') {
   return (
-    '// {"specmanVersion":"1.3.0","modelType":"specman.model.v002.DiagramModel_V002"}\n' +
+    '// {"specmanVersion":"' + specmanVersion + '","modelType":"specman.model.v002.DiagramModel_V002"}\n' +
     'mainSequence {\n' + mainSequenceBody + '}\n'
   );
 }
@@ -31,7 +31,11 @@ test('listTailAreas describes a text, a list, a table, and an image area with st
     '        image(scale=100%, type=png) {\n' +
     '            [base64:YWJj]\n' +
     '        }\n' +
+    '        image(scale=100%, type=plantuml) {\n' +
+    '            `@startuml\nA -> B\n@enduml`\n' +
+    '        }\n' +
     '    }\n',
+    '1.4.0',
   ));
   const found = findStep(ast, { stepId: '97ba3cc4' });
   const areas = listTailAreas(found.step);
@@ -39,7 +43,8 @@ test('listTailAreas describes a text, a list, a table, and an image area with st
     { key: 'tail[0]', kind: 'text' },
     { key: 'tail[1]', kind: 'list', ordered: true, itemCount: 2 },
     { key: 'tail[2]', kind: 'table', rowCount: 2, colCount: 2 },
-    { key: 'tail[3]', kind: 'image' },
+    { key: 'tail[3]', kind: 'image', imageType: 'png' },
+    { key: 'tail[4]', kind: 'image', imageType: 'plantuml' },
   ]);
 });
 

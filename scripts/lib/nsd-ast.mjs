@@ -283,10 +283,11 @@ class Parser {
     return { content: { head, tail }, change };
   }
 
-  // Image blocks are never interpreted, only round-tripped verbatim: `raw` holds the block content
-  // exactly as written — a [base64:...] block for png, a backtick string (PlantUML / SVG source) for
-  // plantuml and svg. A plantuml block may carry backup=(changeset, `source`), which Specman
-  // maintains for accept/reject ("agents leave it alone"); kept as backup: { changeset, raw }.
+  // Image blocks are not interpreted by the AST, only round-tripped verbatim: `raw` holds the block
+  // content exactly as written — a [base64:...] block for png, a backtick string (PlantUML / SVG
+  // source) for plantuml and svg. A plantuml block may carry backup=(changeset, `source`); kept as
+  // backup: { changeset, raw }. The upstream grammar says agents leave it alone, but nsd-plantuml.mjs
+  // writes it on a tracked `set` (that Specman's accept/reject restores from it is unconfirmed).
   parseImageBlock() {
     this.expectKeyword('image');
     this.expect('LPAREN');

@@ -1,6 +1,6 @@
 ---
 name: specman-nsd-editor
-description: Applies a small, precisely specified batch of Specman .nsd edits (text replacements, intro/outro edits, catch blocks, leaf or structured step insertions, table/list/text area inserts and row/item appends/removals, change marks, settings changes) using this plugin's nsd-* scripts, then sanitizes the result. Dispatched by the `edit` skill for batches of 3+ addressed changes, or when the main conversation already carries unrelated context; not for direct invocation, and never decides what content to write.
+description: Applies a small, precisely specified batch of Specman .nsd edits (text replacements, intro/outro edits, catch blocks, leaf or structured step insertions, table/list/text area inserts and row/item appends/removals, PlantUML diagram edits, change marks, settings changes) using this plugin's nsd-* scripts, then sanitizes the result. Dispatched by the `edit` skill for batches of 3+ addressed changes, or when the main conversation already carries unrelated context; not for direct invocation, and never decides what content to write.
 model: sonnet
 effort: low
 maxTurns: 15
@@ -28,6 +28,11 @@ correctly, fast, and reporting the sanitizer's verdict.
   DSL text by hand. After any structural change to a tail (area inserted/removed, row/item
   inserted/removed), re-run `nsd-locate.mjs --step <id>` before addressing that tail again —
   `tail[n]` indices shift.
+- For a PlantUML diagram edit, use `nsd-plantuml.mjs` (`--op get|set|insert`) with
+  `--source-file -` and a quoted heredoc (`<<'EOF'`). Take the diagram source **exactly as given**
+  in your task (it must start with `@start…`, end with `@end…`, and contain no backtick) — never
+  invent or "improve" diagram content. Pass `--changeset` only when your task supplies one. After
+  an `insert`, re-run `nsd-locate.mjs --step <id>` — later `tail[n]` keys shift.
 - `nsd-locate`/`nsd-set-text`/`nsd-area` also take `intro`/`outro` as the step selector (`--step intro`); use
   `nsd-set-text --title`/`--section --text` and `nsd-area --heading` exactly as your task gives them. A
   `break` needs its `catch` via `nsd-catch.mjs --op add --break <id> --head <text>` (fill the returned

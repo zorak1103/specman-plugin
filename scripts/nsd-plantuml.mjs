@@ -12,7 +12,7 @@
 // newlines in the JSON result.
 //
 // Usage: node nsd-plantuml.mjs --file <path> --step <num-or-id|intro|outro> --op get|set|insert [--area tail[n]] [--source-file <path|->] [--position start|end|after:tail[i]] [--scale <1-100>] [--changeset <cs>] --json
-//   (--block is accepted as an alias of --step, like in nsd-area.mjs)
+//   (--block is accepted as an alias of --step, like in nsd-area.mjs; --scale and --position apply to insert only)
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isMainModule, report, parseArgs } from './lib/cli.mjs';
@@ -22,6 +22,10 @@ import { compareVersions } from './lib/versions.mjs';
 
 const MIN_VERSION = '1.4.0';
 const OPS = ['get', 'set', 'insert'];
+// Same shape as an ID/KEYWORD token in lib/nsd-lexer.mjs (letter, then letters/digits/_/-), which is what
+// `expectIdent` accepts for a changeset name; exactly 8 lowercase hex chars would lex as a STEP_ID instead.
+const CHANGESET_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const isIdentifierChangeset = (s) => CHANGESET_RE.test(s) && !/^[0-9a-f]{8}$/.test(s);
 
 /** Throws unless the spec was written by Specman 1.4.0 or newer (PlantUML areas do not exist before). */
 export function requireV14(ast) {
@@ -40,7 +44,8 @@ export function requireV14(ast) {
  * tail area (resolveTailContainer's own message is passed through) or the area is not PlantUML.
  */
 export function resolvePlantumlArea(found, areaKey) {
-  if (!areaKey) throw new Error('nsd-plantuml: --area <tail[n]> is required for this operation.');
+  // parseArgs yields `true` for a bare `--area`; resolveTailContainer would choke on it.
+  if (!areaKey || typeof areaKey !== 'string') throw new Error('nsd-plantuml: --area <tail[n]> is required for this operation (a bare --area needs a value).');
   const { area, index } = resolveTailContainer(found.step, areaKey);
   if (area.kind !== 'image' || area.imageType !== 'plantuml') {
     const what = area.kind === 'image' ? `a ${area.imageType} image` : `a ${area.kind} area`;
@@ -96,6 +101,8 @@ function insertIndex(position, length) {
 
 /** Same rule as `percent()` in lib/nsd-areas.mjs: a number in (0, 100]. Returns the `<n>%` string. */
 function scaleString(scalePercent) {
+  // parseArgs yields `true` for a bare `--scale`.
+  if (scalePercent === true) throw new Error('nsd-plantuml: --scale needs a value (a percentage in (0, 100]).');
   if (typeof scalePercent !== 'number' || !Number.isFinite(scalePercent) || scalePercent <= 0 || scalePercent > 100) {
     throw new Error(`nsd-plantuml: invalid percentage '${scalePercent}' (expected a number in (0, 100]).`);
   }
@@ -126,12 +133,12 @@ function setArea(found, areaKey, source, changeset) {
   const raw = `\`${normalizeSource(source)}\``;
   let backupWritten = false;
   if (changeset) {
-    if (area.backup && area.backup.changeset === changeset) {
+    if (area.change?.kind === 'removed') {
+      throw new Error(`nsd-plantuml: area 'tail[${index}]' is marked as removed; it cannot be edited in a changeset.`);
+    } else if (area.backup && area.backup.changeset === changeset) {
       // keep: it already holds the pre-changeset source
     } else if (area.backup) {
       throw new Error(`nsd-plantuml: area 'tail[${index}]' already has a backup for changeset '${area.backup.changeset}'; refusing to overwrite it for changeset '${changeset}'.`);
-    } else if (area.change?.kind === 'removed') {
-      throw new Error(`nsd-plantuml: area 'tail[${index}]' is marked as removed; it cannot be edited in a changeset.`);
     } else if (area.change?.kind === 'added' && area.change.changeset === changeset) {
       // new in this changeset: nothing to restore
     } else {
@@ -143,14 +150,25 @@ function setArea(found, areaKey, source, changeset) {
   return { areaKey: `tail[${index}]`, backupWritten };
 }
 
-export function applyPlantuml(text, { op, stepSelector, areaKey, source, position = 'end', scalePercent = 100, changeset } = {}) {
+export function applyPlantuml(text, { op, stepSelector, areaKey, source, position, scalePercent, changeset } = {}) {
   if (!OPS.includes(op)) {
     return { ok: false, error: `nsd-plantuml: unknown --op '${op}' (expected: ${OPS.join(', ')}).` };
   }
   try {
-    // parseArgs yields `true` for a bare `--changeset`; refuse anything but a non-empty name up front.
-    if (changeset !== undefined && (typeof changeset !== 'string' || changeset === '')) {
-      throw new Error('nsd-plantuml: --changeset needs a non-empty changeset name.');
+    // parseArgs yields `true` for a bare `--changeset`; refuse anything but a name the lexer reads back as an identifier.
+    if (changeset !== undefined) {
+      if (typeof changeset !== 'string' || changeset === '') {
+        throw new Error('nsd-plantuml: --changeset needs a non-empty changeset name.');
+      }
+      if (!isIdentifierChangeset(changeset)) {
+        throw new Error(`nsd-plantuml: invalid --changeset '${changeset}' (expected an identifier: a letter followed by letters, digits, '_' or '-'; not exactly 8 lowercase hex characters).`);
+      }
+    }
+    // Scale and position only mean something for a new area; refuse them instead of silently ignoring them.
+    if (op !== 'insert') {
+      for (const [flag, value] of [['--scale', scalePercent], ['--position', position]]) {
+        if (value !== undefined) throw new Error(`nsd-plantuml: ${flag} applies to --op insert only (it is not supported for --op ${op}).`);
+      }
     }
     const ast = parseDiagram(text);
     requireV14(ast);
@@ -161,7 +179,7 @@ export function applyPlantuml(text, { op, stepSelector, areaKey, source, positio
       const done = setArea(found, areaKey, source, changeset);
       return { ok: true, text: serializeDiagram(ast), ...done };
     }
-    const done = insertArea(found, source, position, scalePercent, changeset);
+    const done = insertArea(found, source, position ?? 'end', scalePercent ?? 100, changeset);
     return { ok: true, text: serializeDiagram(ast), ...done };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -188,7 +206,8 @@ function main() {
   }
   const result = applyPlantuml(text, {
     op: args.op, stepSelector: args.step, areaKey: args.area, source, position: args.position,
-    scalePercent: args.scale !== undefined ? Number(args.scale) : undefined,
+    // a bare `--scale` stays `true` so it is refused rather than becoming Number(true) === 1
+    scalePercent: typeof args.scale === 'string' ? Number(args.scale) : args.scale,
     changeset: args.changeset,
   });
   if (result.ok && result.text !== undefined) writeFileSync(args.file, result.text);

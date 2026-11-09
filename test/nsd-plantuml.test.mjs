@@ -448,6 +448,61 @@ test('a changeset that is not a non-empty string is refused for set and insert, 
   }
 });
 
+test('a changeset that is not a lexer identifier is refused and names --changeset', () => {
+  for (const changeset of ['my cs', '1abc', '-x', 'a.b', 'deadbeef', 'a`b']) {
+    const set = applyPlantuml(diagram14(), setOpts({ changeset }));
+    assert.equal(set.ok, false, `set ${changeset}`);
+    assert.match(set.error, /--changeset/);
+    assert.equal('text' in set, false);
+    const ins = applyPlantuml(diagram14(), insOpts({ changeset }));
+    assert.equal(ins.ok, false, `insert ${changeset}`);
+    assert.match(ins.error, /--changeset/);
+  }
+});
+
+test('identifier-shaped changeset names are accepted and the result re-parses', () => {
+  for (const changeset of ['yellow', 'cs_2', 'Rev-3', 'text', 'a1']) {
+    const set = applyPlantuml(diagram14(), setOpts({ changeset }));
+    assert.equal(set.ok, true, `set ${changeset}: ${set.error}`);
+    assert.doesNotThrow(() => parseDiagram(set.text));
+    const ins = applyPlantuml(diagram14(), insOpts({ changeset }));
+    assert.equal(ins.ok, true, `insert ${changeset}: ${ins.error}`);
+    assert.doesNotThrow(() => parseDiagram(ins.text));
+  }
+});
+
+test('--scale and --position are refused for set and get (insert only), naming the option', () => {
+  for (const op of ['set', 'get']) {
+    const base = op === 'set' ? setOpts() : { op: 'get', stepSelector: '5582897d', areaKey: 'tail[1]' };
+    const scaled = applyPlantuml(diagram14(), { ...base, scalePercent: 30 });
+    assert.equal(scaled.ok, false, `${op} scale`);
+    assert.match(scaled.error, /--scale/);
+    assert.match(scaled.error, /insert/);
+    assert.equal('text' in scaled, false);
+    const positioned = applyPlantuml(diagram14(), { ...base, position: 'start' });
+    assert.equal(positioned.ok, false, `${op} position`);
+    assert.match(positioned.error, /--position/);
+    assert.equal('text' in positioned, false);
+  }
+});
+
+test('a bare --area (no value) is refused with a message naming --area', () => {
+  for (const op of ['get', 'set']) {
+    const r = applyPlantuml(diagram14(), { op, stepSelector: '5582897d', areaKey: true, source: NEW_SOURCE });
+    assert.equal(r.ok, false, op);
+    assert.match(r.error, /--area/);
+    assert.doesNotMatch(r.error, /key\.match/);
+  }
+});
+
+test('set: a tracked set on a removed area is refused even with a same-changeset backup', () => {
+  const withBackup = singleImageBody('image(scale=100%, type=plantuml, change=(removed, blue)) { `@startuml\nA -> B\n@enduml`, backup=(blue, `@startuml\nA -> Z\n@enduml`) }');
+  const r = applyPlantuml(diagram14(withBackup), setOpts({ areaKey: 'tail[0]', changeset: 'blue' }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /removed/);
+  assert.equal('text' in r, false);
+});
+
 // ---------------------------------------------------------------- real jar oracle
 
 // The real Specman jar is the oracle for "grammar-valid": a tracked `set` and a tracked `insert` on
@@ -605,6 +660,49 @@ test('cli: get --json prints the source without needing --source-file and does n
     const out = JSON.parse(r.stdout);
     assert.equal(out.ok, true);
     assert.equal(out.source, '@startuml\nA -> B\n@enduml');
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: a bare --scale exits 1 and leaves the file byte-identical', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'insert', '--source-file', '-', '--scale', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /--scale/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: set --scale exits 1 and leaves the file byte-identical', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'set', '--area', 'tail[1]', '--scale', '30', '--source-file', '-', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /--scale/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: a changeset with a space exits 1 and leaves the file byte-identical', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'insert', '--changeset', 'my cs', '--source-file', '-', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    assert.match(JSON.parse(r.stdout).error, /--changeset/);
     assert.equal(readFileSync(file, 'utf8'), before);
   });
 });

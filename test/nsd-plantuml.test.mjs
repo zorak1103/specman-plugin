@@ -1,12 +1,16 @@
 // nsd-plantuml.mjs: read (`get`), replace (`set`) and insert PlantUML image areas in Specman 1.4 specs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { applyPlantuml } from '../scripts/nsd-plantuml.mjs';
 import { parseDiagram, serializeDiagram } from '../scripts/lib/nsd-ast.mjs';
-import { resolveTarget } from '../scripts/lib/nsd-paths.mjs';
+import { resolveTarget, listSequences } from '../scripts/lib/nsd-paths.mjs';
+import { resolveJarPath } from '../scripts/resolve-jar.mjs';
+import { runSanitize, sanitizeUntilStable } from '../scripts/sanitize.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.join(__dirname, '..', 'reference', 'suc-template.nsd');
@@ -442,4 +446,165 @@ test('a changeset that is not a non-empty string is refused for set and insert, 
     assert.match(ins.error, /--changeset/);
     assert.equal('text' in ins, false);
   }
+});
+
+// ---------------------------------------------------------------- real jar oracle
+
+// The real Specman jar is the oracle for "grammar-valid": a tracked `set` and a tracked `insert` on
+// the PlantUML diagram of the upstream 1.4 reference must be accepted by the sanitizer and survive it.
+// Observed with Specman 1.4.0: the sanitizer does rewrite the file (it re-adds the `// Specman: ...`
+// header comment block and refreshes the plain=`...` fields, "plainTextFieldsRefreshed":10) but keeps
+// the envelope at specmanVersion 1.4.0, renumbers no steps, and leaves the plantuml raw and backup intact.
+const ref14Path = path.join(__dirname, '..', 'reference', 'specman-reference-v1.4-model-v2.nsd');
+const jar = resolveJarPath(process.env);
+
+/**
+ * Finds the step or block holding the reference's PlantUML image by walking the AST; returns
+ * { stepId, index } where stepId is a selector for resolveTarget (a step ID, or `intro`/`outro`).
+ * In the upstream 1.4 reference the diagram lives in the outro block.
+ */
+function findPlantumlStep(ast) {
+  const isPlantuml = (a) => a.kind === 'image' && a.imageType === 'plantuml';
+  for (const { steps } of listSequences(ast)) {
+    for (const step of steps) {
+      const index = step.content.tail.findIndex(isPlantuml);
+      if (index !== -1) return { stepId: step.stepId, index };
+    }
+  }
+  for (const block of ['intro', 'outro']) {
+    const index = ast[block]?.tail.findIndex(isPlantuml) ?? -1;
+    if (index !== -1) return { stepId: block, index };
+  }
+  throw new Error('no step or block with a PlantUML image in the reference');
+}
+
+test(
+  'the real sanitizer accepts a tracked set and a tracked insert on the 1.4 reference and keeps them',
+  { skip: !jar.ok && 'SPECMAN_JAR not set to a usable jar' },
+  () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'specman-plantuml-'));
+    const file = path.join(dir, 'ref.nsd');
+    try {
+      const original = readFileSync(ref14Path, 'utf8');
+      const { stepId, index } = findPlantumlStep(parseDiagram(original));
+      const setSource = '@startuml\nclass Hello\nclass Mars\nHello --> Mars\n@enduml';
+      const insSource = '@startuml\nAlice -> Bob : hi\n@enduml';
+
+      const set = applyPlantuml(original, { op: 'set', stepSelector: stepId, areaKey: `tail[${index}]`, source: setSource, changeset: 'yellow' });
+      assert.equal(set.ok, true, set.error);
+      const ins = applyPlantuml(set.text, { op: 'insert', stepSelector: stepId, position: 'end', source: insSource, changeset: 'yellow' });
+      assert.equal(ins.ok, true, ins.error);
+      writeFileSync(file, ins.text);
+
+      const result = sanitizeUntilStable(
+        () => runSanitize(jar.path, file),
+        () => readFileSync(file, 'utf8'),
+      );
+      assert.equal(result.ok, true, result.message ?? result.error);
+      assert.equal(result.stable, true);
+
+      const tail = resolveTarget(parseDiagram(readFileSync(file, 'utf8')), stepId).step.content.tail;
+      assert.equal(tail[index].raw, `\`${setSource}\``);
+      assert.equal(tail[index].backup.changeset, 'yellow');
+      assert.match(tail[index].backup.raw, /class World/);
+      const inserted = tail[tail.length - 1];
+      assert.equal(inserted.imageType, 'plantuml');
+      assert.equal(inserted.raw, `\`${insSource}\``);
+      assert.equal(inserted.change.kind, 'added');
+      assert.equal(inserted.change.changeset, 'yellow');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+// ---------------------------------------------------------------- CLI
+
+const scriptPath = path.join(__dirname, '..', 'scripts', 'nsd-plantuml.mjs');
+
+function runCli(args, input) {
+  const r = spawnSync(process.execPath, [scriptPath, ...args], { input, encoding: 'utf8' });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+/** Runs `fn(file)` against a temp .nsd containing `text`, cleaning the temp dir afterwards. */
+function withTempSpec(text, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'specman-plantuml-cli-'));
+  const file = path.join(dir, 'spec.nsd');
+  writeFileSync(file, text);
+  try {
+    return fn(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('cli: set reads the source from stdin, writes the file and prints ok JSON', () => {
+  withTempSpec(diagram14(), (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'set', '--area', 'tail[1]', '--source-file', '-', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, true);
+    assert.equal(out.areaKey, 'tail[1]');
+    assert.equal('text' in out, false);
+    assert.equal(tailOf(readFileSync(file, 'utf8'), 1).raw, '`@startuml\nX -> Y\n@enduml`');
+  });
+});
+
+test('cli: set on a text area exits 1 with ok:false and leaves the file untouched', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'set', '--area', 'tail[0]', '--source-file', '-', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /not a PlantUML area/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: insert with an after: index that does not exist exits 1 and leaves the file byte-identical', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'insert', '--position', 'after:tail[9]', '--source-file', '-', '--json'],
+      '@startuml\nX -> Y\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    assert.equal(JSON.parse(r.stdout).ok, false);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: set with a source containing a backtick exits 1 and leaves the file byte-identical', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(
+      ['--file', file, '--step', '5582897d', '--op', 'set', '--area', 'tail[1]', '--source-file', '-', '--json'],
+      '@startuml\nX -> `Y`\n@enduml\n',
+    );
+    assert.equal(r.status, 1);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /backtick/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});
+
+test('cli: get --json prints the source without needing --source-file and does not write', () => {
+  const before = diagram14();
+  withTempSpec(before, (file) => {
+    const r = runCli(['--file', file, '--step', '5582897d', '--op', 'get', '--area', 'tail[1]', '--json']);
+    assert.equal(r.status, 0, r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, true);
+    assert.equal(out.source, '@startuml\nA -> B\n@enduml');
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
 });

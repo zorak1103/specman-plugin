@@ -7,8 +7,9 @@
 :important-caption: Important
 :warning-caption: Warning
 
-Creates and edits Specman specifications (`.nsd`, SUCs) and implements or
-synchronizes code based on them.
+A Claude Code plugin that creates and edits https://github.com/j-specman/specman[Specman]
+specifications (`.nsd`, SUCs), migrates Word documents to Specman, and implements or synchronizes
+code based on them.
 
 == Why
 
@@ -280,6 +281,11 @@ edits of the wrong `.nsd` file), a `PreToolUse` hook can be added via `hooks/hoo
 * **Step moves with change tracking** (`source`/`target` step pairs) — Specman validates the
   `sourceStep=` link nowhere; a faulty reference crashes the GUI on load. Remains a manual Specman
   action.
+* **Creating or editing PlantUML diagrams** — Specman 1.4 can embed PlantUML (and SVG) images in a
+  specification and renders them itself. This plugin preserves such image blocks intact (including
+  their `backup=` change tracking) but has no script to create or change their source; image
+  insertion via `nsd-insert-image.mjs` and the Word migration produce PNG images only. Add or edit
+  PlantUML blocks in Specman.
 * **PDF export itself** (the `pdfOptions` fields can be changed via `nsd-edit-settings.mjs`, but the
   export operation cannot) — the sanitizer jar offers no CLI operation for it, only `--sanitize`.
 * **Automatic migration from V001 (legacy JSON) to V2** — must be done once manually in Specman

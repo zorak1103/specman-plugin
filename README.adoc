@@ -75,7 +75,7 @@ the plugin does not know; it then points this out on a parse error.
 | Skill | Purpose
 
 | `plan`       | Interview-guided creation of a new SUC or sub-SUC file from the template
-| `edit`       | Targeted change to an existing `.nsd` file (text, new step, change mark)
+| `edit`       | Targeted change to an existing `.nsd` file (text, new step, PlantUML diagram, change mark)
 | `implement`  | Implement code from a specification or, for large scope, create a phase plan
 | `sync-refs`  | Reconcile `SUC-XXX Step N (ID: xxx)` references in code (Java/TypeScript) with the current spec state; also recognizes the legacy German keyword `Schritt` and keeps whichever keyword a comment already uses
 | `migrate`    | Migrate a Word specification (`.docx`) to `.nsd` — without loss of logic, result next to the docx
@@ -105,6 +105,9 @@ only an instruction to the model but is mechanically enforced:
 * `scripts/migrate-inventory.mjs` provides an overview per docx for `--all` (scope, target status).
 * `scripts/nsd-insert-image.mjs` places a PNG as a wireframe image block in a step, `intro` or
   `outro` (text/list/table areas stay with `nsd-area.mjs`; also usable on its own via `edit`).
+* `scripts/nsd-plantuml.mjs` reads (`get`), replaces (`set`) and inserts (`insert`) PlantUML diagrams
+  in a step, `intro` or `outro` (also usable on its own via `edit`, see <<plantuml,PlantUML diagrams>>).
+  Specman 1.4.0+ specs only; sources containing a backtick are refused.
 * `scripts/nsd-history.mjs --mode import` takes over the docx's history table 1:1.
 
 == `.wrk` working copies (Specman autoload)
@@ -156,6 +159,36 @@ The grammar gives `text` and `table` areas a `change` slot, but neither a `list`
 (only its individual `item`s) nor a `tableRow` — this script reflects that asymmetry instead of
 hiding it: `insert --kind list --changeset` marks each initial item individually, `add-row`
 reports `untracked: true`, `remove-row --changeset` is refused.
+
+[[plantuml]]
+== PlantUML diagrams
+
+Specman 1.4 can embed PlantUML diagrams (`image(scale=…, type=plantuml)` areas) in a step, `intro`
+or `outro`. `scripts/nsd-plantuml.mjs` reads, replaces and inserts their source; the model decides
+on the diagram content, the script handles the DSL mechanics. Diagrams are addressed by their tail
+key (`tail[n]`, listed by `nsd-locate.mjs` with `kind: image` and `imageType: plantuml`):
+
+[source,bash]
+----
+node scripts/nsd-plantuml.mjs --file <file> --step <id> --op get --area tail[1] --json
+node scripts/nsd-plantuml.mjs --file <file> --step <id> --op set --area tail[1] --source-file diagram.puml [--changeset <cs>] --json
+node scripts/nsd-plantuml.mjs --file <file> --step <id> --op insert --position end --source-file - [--scale 80] [--changeset <cs>] --json
+----
+
+* `get` prints the source (plus scale, change mark and backup) and never writes; `set` replaces the
+  complete source of an existing diagram; `insert` adds a new one (`--position start|end|after:tail[i]`,
+  default `end`; `--scale` 1-100, default 100). `--source-file` takes a path or `-` for stdin.
+* Specman 1.4.0+ specs only; older ones are refused (open and save them once in Specman 1.4.0+).
+* The source must start with `@start…` and end with `@end…`; a source containing a backtick is
+  refused, because the `.nsd` format has no escape for it.
+* Change tracking: the grammar has no "changed" change type for areas, so a tracked
+  `set --changeset <cs>` records the old source as `backup=(<cs>, old source)` instead of a `change=`
+  mark. An untracked `set` leaves an existing `change=`/`backup=` alone. A diagram marked `removed`,
+  or carrying a backup for a different changeset, refuses a tracked `set`. `insert --changeset`
+  marks the new diagram `change=(added, <cs>)`.
+* `insert` shifts the `tail[n]` keys of later areas; re-run `nsd-locate.mjs`.
+* Rendering and PlantUML syntax checking remain Specman's job. SVG and PNG blocks are not edited
+  by this script.
 
 == Editing intro and outro
 
@@ -281,11 +314,12 @@ edits of the wrong `.nsd` file), a `PreToolUse` hook can be added via `hooks/hoo
 * **Step moves with change tracking** (`source`/`target` step pairs) — Specman validates the
   `sourceStep=` link nowhere; a faulty reference crashes the GUI on load. Remains a manual Specman
   action.
-* **Creating or editing PlantUML diagrams** — Specman 1.4 can embed PlantUML (and SVG) images in a
-  specification and renders them itself. This plugin preserves such image blocks intact (including
-  their `backup=` change tracking) but has no script to create or change their source; image
+* **SVG diagrams, and rendering or syntax checking of PlantUML** — PlantUML source can be read,
+  changed and created with `nsd-plantuml.mjs` (see <<plantuml,PlantUML diagrams>>), but Specman does
+  the rendering and the PlantUML syntax checking; the script only validates the `@start…`/`@end…`
+  frame. SVG and PNG image blocks are preserved intact but not edited by this plugin: image
   insertion via `nsd-insert-image.mjs` and the Word migration produce PNG images only. Add or edit
-  PlantUML blocks in Specman.
+  SVG blocks in Specman.
 * **PDF export itself** (the `pdfOptions` fields can be changed via `nsd-edit-settings.mjs`, but the
   export operation cannot) — the sanitizer jar offers no CLI operation for it, only `--sanitize`.
 * **Automatic migration from V001 (legacy JSON) to V2** — must be done once manually in Specman

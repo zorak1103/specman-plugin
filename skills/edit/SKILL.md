@@ -1,6 +1,6 @@
 ---
 name: edit
-description: "Applies a targeted edit (text change, intro/outro title, section or list/table content, new leaf or structured step, catch block for a break, table/list/text area insert or row/item append/remove, or added/removed change mark) to an existing Specman .nsd specification, using this plugin's AST scripts, then sanitizes the result. Use only when a specific existing .nsd file needs a scoped change. Not for creating a new specification (use plan) or for implementing code from one (use implement)."
+description: "Applies a targeted edit (text change, intro/outro title, section or list/table content, new leaf or structured step, catch block for a break, table/list/text area insert or row/item append/remove, PlantUML diagram read/change/create, or added/removed change mark) to an existing Specman .nsd specification, using this plugin's AST scripts, then sanitizes the result. Use only when a specific existing .nsd file needs a scoped change. Not for creating a new specification (use plan) or for implementing code from one (use implement)."
 argument-hint: "<file> <what to change>"
 allowed-tools:
   - Read
@@ -70,7 +70,8 @@ This returns `areas` (addressable text areas: `head`, `tail[n]`, `tail[n].items[
 `tail[n].rows[r].cells[c]`, and for structured steps additionally `ifBranch.head`/`elseBranch.head`/
 `defaultBranch.head`/`caseBranch[n].head`), `tailAreas` (the tail areas themselves as whole
 building blocks — `tail[n]` with `kind: text|list|table|image`, for `list` additionally `ordered`/
-`itemCount`, for `table` additionally `rowCount`/`colCount` — the basis for insert/append/remove
+`itemCount`, for `table` additionally `rowCount`/`colCount`, for `image` additionally `imageType`
+(`png|plantuml|svg`, so PlantUML diagrams can be found) — the basis for insert/append/remove
 in Step 4) and `sequences` (valid insertion targets for new steps).
 
 Instead of a step, `--step` also accepts `intro` or `outro` (alias `--block`): title,
@@ -97,7 +98,8 @@ business rules, `Akzeptanzkriterien` = acceptance criteria). Use the headings ex
 - **From 3 addresses on, or when this edit comes up in the middle of an unrelated conversation**
   (the main context already carries a lot of unrelated history): `Agent
   (specman:specman-nsd-editor)` with a concise, fully worded task — file, the exact `key` values
-  from Step 2, and the desired new content. The subagent makes no design decisions, only
+  from Step 2, and the desired new content (for a PlantUML diagram: the complete final source,
+written by you beforehand). The subagent makes no design decisions, only
   executes.
 
 ## Step 4 — Apply the change
@@ -173,6 +175,52 @@ no `change` slot at all: `add-row` always inserts untracked (the response carrie
 action. `remove`/`remove-item` delete immediately without `--changeset`; with `--changeset`,
 `change=(removed, cs)` is set instead (not possible for `list`, see above — there, mark
 individual items via `remove-item`).
+
+**Read, change, create a PlantUML diagram** (an `image` tail area with `imageType: plantuml`, for
+steps and for `--step intro|outro`; Specman 1.4.0+ specs only):
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-plantuml.mjs" --file <target> --step <id|intro|outro> --op get    --area <tail-key> --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-plantuml.mjs" --file <target> --step <id|intro|outro> --op set    --area <tail-key> --source-file - [--changeset <cs>] --json <<'EOF'
+@startuml
+...
+@enduml
+EOF
+node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-plantuml.mjs" --file <target> --step <id|intro|outro> --op insert --position start|end|after:tail[i] --source-file - [--scale <1-100>] [--changeset <cs>] --json <<'EOF'
+@startuml
+...
+@enduml
+EOF
+```
+`--source-file` takes a file path or `-` for stdin (a quoted heredoc `<<'EOF'` keeps the source
+verbatim). `--block` is accepted as an alias of `--step`.
+
+* `get` never writes. It returns `source` (LF newlines, without the surrounding backticks),
+  `scalePercent`, and — if present — `change` and `backup` (`{ changeset, source }`). Find the
+  `tail[n]` key via `tailAreas` (`kind: image`, `imageType: plantuml`) from Step 2; never guess it.
+* To change a diagram, read the current source with `get`, rewrite it from the user's description
+  and pass the **complete** new source to `set` — there is no partial edit. `set` returns `areaKey`
+  and `backupWritten`. Never invent diagram content beyond what the user asked for.
+* The source must start with `@start…` and end with `@end…` (e.g. `@startuml` … `@enduml`) and
+  must not contain a backtick — the `.nsd` format has no escape for it, so the script refuses it.
+* `set --changeset <cs>` keeps the old source as `backup=(<cs>, old source)` so that Specman can
+  accept or reject the change; it does **not** write a `change=` mark (the grammar has no
+  "changed" change type for areas). An untracked `set` (no `--changeset`) overwrites the source
+  and leaves any existing `change=`/`backup=` as it is. A tracked `set` is refused for a diagram
+  marked `removed` and for one that already carries a backup for a different changeset; a repeat
+  `set` for the same changeset keeps the existing backup, and so does a diagram that is
+  `added` in this very changeset (nothing to restore).
+* `insert` adds a new diagram (default `--position end`, `--scale 100`; scale is a percentage in
+  (0, 100]) and returns the new `areaKey`. With `--changeset <cs>` it is marked
+  `change=(added, <cs>)`. Use the changeset from Step 2 (`settings.changeSetName`) when tracking
+  is active.
+* `insert` shifts the `tail[n]` keys of every later area — re-run `nsd-locate.mjs --step <id>`
+  before addressing the tail again.
+* Specs saved by a Specman older than 1.4.0 are refused: tell the user to open and save the spec
+  once in Specman 1.4.0+.
+* Run the sanitizer (Step 6) after `set`/`insert`, as for every edit.
+* SVG and PNG image blocks are not edited this way (`nsd-area.mjs --op remove` also refuses image
+  areas). Rendering the diagram and checking the PlantUML syntax remain Specman's job — the script
+  only validates the `@start…`/`@end…` frame.
 
 **Create, change, remove a `catch` for a `break`:**
 ```

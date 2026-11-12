@@ -8,25 +8,21 @@
 :warning-caption: Warning
 
 A Claude Code plugin that creates and edits https://github.com/j-specman/specman[Specman]
-specifications (`.nsd`, SUCs), migrates Word documents to Specman, and implements or synchronizes
-code based on them.
+specifications (`.nsd`, SUCs) and implements or synchronizes code based on them.
 
 == Why
 
-Specman `.nsd` files are a textual DSL with backtick strings, nested sequences and
-character-exact change markups. Edited by hand, a model has to reconstruct this syntax from scratch
-every time — error-prone and slow. This plugin encapsulates the DSL mechanics in scripts (a shared
-parser/serializer that mirrors the official grammar); the skills only decide on content and
-addressing.
+Specman `.nsd` files are a textual DSL defined by an ANTLR grammar
+(`reference/SpecmanModel_V002.g4`). Since 2.0.0 the plugin no longer ships a parser or editing
+scripts: the skills tell Claude to edit the `.nsd` text directly against the grammar and a complete
+worked example (`reference/specman-reference-v1.4-model-v2.nsd`), and the Specman jar
+(`--sanitize`) validates and normalizes the result. What remains as code is only what Claude cannot
+do reliably by hand: running the jar and reconciling step-number references in source code.
 
-This encapsulation is not a mere matter of style but of asymmetric failure modes: when a script
-cannot do something (because a construct is not supported yet), it fails loudly and immediately —
-clear error message, nothing is written. DSL syntax reconstructed by hand, in contrast, often fails
-silently: the file stays syntactically plausible, but `markups` offsets, hand-written `plain=` or
-`sourceStep` links only crash when loaded in Specman itself, or silently corrupt change tracking
-(the sanitizer only checks grammar conformity, not these semantic invariants). A missing script
-capability is therefore always a stop signal — extend the script or hand the task back to the user
-("do this once in Specman") — never a reason to construct DSL text yourself.
+The sanitizer checks grammar conformity and a few invariants (duplicate step IDs, unresolvable
+steplinks); it renumbers steps and regenerates `plain=` fields. It does *not* validate
+`source`/`target` move links or `markups=` offsets — the skills contain hard rules for these (see
+<<limits>>).
 
 == Installation
 
@@ -41,32 +37,21 @@ capability is therefore always a stop signal — extend the script or hand the t
 * Java (to run the Specman sanitizer jar)
 * The environment variable `SPECMAN_JAR`, set to the full path of
   `specman-*-jar-with-dependencies.jar` (Specman *1.4.0 or newer*). The jar itself is not part of
-  this plugin (~50-70 MB, too large for the repo) — see `VENDORING.md` for where to get it and
-  update notes.
+  this plugin (~50-70 MB) — see `VENDORING.md`.
 
 [source,bash]
 ----
 export SPECMAN_JAR="/path/to/specman-1.4.0-jar-with-dependencies.jar"
 ----
 
-On Windows, set it as a user or system variable so that it is available in every Claude Code
-session (restart Claude Code after setting it).
-
-The skills `plan`, `edit` and `migrate` check the variable in "Step 0", before touching anything,
-and abort with a clear message if it is missing, points to a directory or a non-jar file, or the
-file does not exist. They show warnings about the jar (older than 1.4.0, version not recognizable
-from the file name) to the user already in Step 0, before continuing; the warning that the
-specification was saved with a newer Specman than the jar is provided by `sanitize.mjs` in the
-`warnings` field, and the skills show it in the sanitize step. The same check of the jar by hand:
+On Windows, set it as a user or system variable and restart Claude Code. The skills `plan` and
+`edit` check the variable in "Step 0", before touching anything, and abort with a clear message if
+it is missing or invalid; the same check by hand:
 
 [source,bash]
 ----
 node scripts/resolve-jar.mjs --json
 ----
-
-The model format is fully understood up to Specman 1.4.0 (including meta tags, PlantUML/SVG images
-and change marks on table cells). Specifications from an even newer Specman may contain constructs
-the plugin does not know; it then points this out on a parse error.
 
 == Skills
 
@@ -75,194 +60,48 @@ the plugin does not know; it then points this out on a parse error.
 | Skill | Purpose
 
 | `plan`       | Interview-guided creation of a new SUC or sub-SUC file from the template
-| `edit`       | Targeted change to an existing `.nsd` file (text, new step, PlantUML diagram, change mark)
+| `edit`       | Targeted change to an existing `.nsd` file, edited directly and validated with the jar
 | `implement`  | Implement code from a specification or, for large scope, create a phase plan
-| `sync-refs`  | Reconcile `SUC-XXX Step N (ID: xxx)` references in code (Java/TypeScript) with the current spec state; also recognizes the legacy German keyword `Schritt` and keeps whichever keyword a comment already uses
-| `migrate`    | Migrate a Word specification (`.docx`) to `.nsd` — without loss of logic, result next to the docx
+| `sync-refs`  | Reconcile `SUC-XXX Step N (ID: xxx)` references in code (Java/TypeScript) with the current spec state; also recognizes the legacy German keyword `Schritt`
 |===
 
-All five can be invoked by the model and are available via `/specman:<name>`.
+All four can be invoked by the model and are available via `/specman:<name>`.
 
-== Migration `.docx` → `.nsd`
-
-`migrate` converts existing Word SUCs to Specman. Top rule: *no logic may be lost*. This is not
-only an instruction to the model but is mechanically enforced:
-
-* `scripts/docx-extract.mjs` reads the docx (own ZIP/XML reader, no dependencies) into an
-  id-addressed block tree (`p<N>` paragraphs, `t<N>` tables, `i<N>` images) plus `outline.txt`.
-  Tracked changes are taken in their final state (insertions are kept, deletions dropped),
-  comments are ignored; images end up under generated file names in the working folder.
-* From this, the model writes a plan (`skills/migrate/plan-format.md`); text is taken by
-  reference (`ref`), not from memory.
-* `scripts/nsd-build-from-plan.mjs` builds the `.nsd` from template, plan and extract and **aborts**
-  as long as a paragraph or image of the docx is neither used nor listed as `ignored` with a
-  reason. Constructs that cannot be mapped (merged cells, nested lists) are reported as a warning,
-  never silently altered.
-* Step texts are taken over without the prefix `System:`/`User:` (the actor is stated in the
-  sentence); the builder refuses these prefixes as `label`.
-* After sanitizing, `scripts/migrate-verify.mjs` checks that every paragraph appears in the result
-  and that the image and step counts match.
-* `scripts/migrate-inventory.mjs` provides an overview per docx for `--all` (scope, target status).
-* `scripts/nsd-insert-image.mjs` places a PNG as a wireframe image block in a step, `intro` or
-  `outro` (text/list/table areas stay with `nsd-area.mjs`; also usable on its own via `edit`).
-* `scripts/nsd-plantuml.mjs` reads (`get`), replaces (`set`) and inserts (`insert`) PlantUML diagrams
-  in a step, `intro` or `outro` (also usable on its own via `edit`, see <<plantuml,PlantUML diagrams>>).
-  Specman 1.4.0+ specs only; sources containing a backtick are refused.
-* `scripts/nsd-history.mjs --mode import` takes over the docx's history table 1:1.
+The `.docx` migration (`migrate` skill) of 1.x was removed in 2.0.0.
 
 == `.wrk` working copies (Specman autoload)
 
-If an `.nsd` file is currently open in Specman (with autoload enabled), Specman immediately creates
-a working copy `<file>.nsd.wrk` and from then on reads only that. This plugin detects this
-automatically (`resolve-target.mjs`) and then edits only the `.wrk` — otherwise, saving in Specman
-itself would overwrite a `.wrk`-only change with the old state.
+If an `.nsd` file is open in Specman (with autoload enabled), Specman creates a working copy
+`<file>.nsd.wrk` and reads only that. The skills edit and read the `.wrk` when it exists — otherwise
+saving in Specman would overwrite your change with the old state. `sync-refs` also prefers the
+`.wrk`.
 
 == Change tracking
 
-The `edit` skill checks `changeModeEnabled` in the diagram settings. If it is off, the skill asks
-whether to enable it before continuing. Change kinds are exactly `added`/`removed` (scripts never
-produce `source`/`target` — see below) and can by now be set on practically every construct
-(grammar update of 2026-09-16).
+When `changeModeEnabled` is on in the diagram settings, `edit` marks whole new elements as
+`change=(added, <changeset>)` and removed ones as `change=(removed, <changeset>)`. Anything else
+(text changes inside existing elements, step moves, `markups=` offsets) is refused and handed back
+to the user — do it in Specman itself.
 
-Changes to plain text go through `markups=[(from,to,Changed,changeset)]`, computed from a
-before/after comparison of the plain text regenerated by Specman itself. Deliberately
-conservative: exactly one contiguous change span per edit, no fine-grained splitting at HTML
-formatting boundaries (that would require Specman's own Swing renderer).
+[[limits]]
+== What the plugin does not do
 
-== Inserting structured steps
-
-`scripts/nsd-insert-step.mjs` also inserts structured steps besides `simple`/`break`
-(`while`/`doWhile`/`subsequence`/`if`/`ifElse`/`case`). The grammar requires at least one step in
-every branch/body (`step+`), and for `case` additionally a default branch plus at least two case
-branches (`--branches`, default 2) — the script automatically fills every mandatory slot with a
-structurally valid but empty placeholder and returns `insertedStepId`/`placeholderStepIds`, so the
-calling skill can fill them immediately via `nsd-set-text.mjs`. Branch headings are addressable as
-separate areas for this purpose (`ifBranch.head`/`elseBranch.head`/`defaultBranch.head`/`caseBranch[n].head`,
-visible in the `areas` output of `nsd-locate.mjs` for the new step).
-
-== Tables, lists and text blocks
-
-`scripts/nsd-area.mjs` inserts a `table`/`list`/`text` area into the tail of a step
-(`--op insert`), adds a row to an existing table or an item to an existing list
-(`--op add-row`/`add-item`), or removes a whole area, an item or a row
-(`--op remove`/`remove-item`/`remove-row`). It closes the gap that `nsd-insert-step.mjs`
-(a new step always gets an empty tail) and `nsd-set-text.mjs` (only fills areas that already
-exist) deliberately leave open:
-
-[source,bash]
-----
-node scripts/nsd-area.mjs --file <file> --step <id> --op insert --kind table --position end --rows '[["h1","h2"],["a","b"]]' --cols '["30%","70%"]' --json
-node scripts/nsd-area.mjs --file <file> --step <id> --op add-row --area tail[0] --position end --cells '["c","d"]' --json
-----
-
-The grammar gives `text` and `table` areas a `change` slot, but neither a `list` area as a whole
-(only its individual `item`s) nor a `tableRow` — this script reflects that asymmetry instead of
-hiding it: `insert --kind list --changeset` marks each initial item individually, `add-row`
-reports `untracked: true`, `remove-row --changeset` is refused.
-
-[[plantuml]]
-== PlantUML diagrams
-
-Specman 1.4 can embed PlantUML diagrams (`image(scale=…, type=plantuml)` areas) in a step, `intro`
-or `outro`. `scripts/nsd-plantuml.mjs` reads, replaces and inserts their source; the model decides
-on the diagram content, the script handles the DSL mechanics. Diagrams are addressed by their tail
-key (`tail[n]`, listed by `nsd-locate.mjs` with `kind: image` and `imageType: plantuml`):
-
-[source,bash]
-----
-node scripts/nsd-plantuml.mjs --file <file> --step <id> --op get --area tail[1] --json
-node scripts/nsd-plantuml.mjs --file <file> --step <id> --op set --area tail[1] --source-file diagram.puml [--changeset <cs>] --json
-node scripts/nsd-plantuml.mjs --file <file> --step <id> --op insert --position end --source-file - [--scale 80] [--changeset <cs>] --json
-----
-
-* `get` prints the source (plus scale, change mark and backup) and never writes; `set` replaces the
-  complete source of an existing diagram; `insert` adds a new one (`--position start|end|after:tail[i]`,
-  default `end`; `--scale` 1-100, default 100; both apply to `insert` only, `get`/`set` refuse them). `--source-file` takes a path or `-` for stdin.
-* Specman 1.4.0+ specs only; older ones are refused (open and save them once in Specman 1.4.0+).
-* The source must start with `@start…` and end with `@end…`; a source containing a backtick is
-  refused, because the `.nsd` format has no escape for it.
-* Change tracking: the grammar has no "changed" change type for areas, so a tracked
-  `set --changeset <cs>` records the old source as `backup=(<cs>, old source)` instead of a `change=`
-  mark. The sanitizer accepts this; that Specman's accept/reject restores the old source from a
-  plugin-written `backup=` has not yet been confirmed in the GUI. An untracked `set` leaves an existing `change=`/`backup=` alone. A diagram marked `removed`
-  (even with a backup), or carrying a backup for a different changeset, refuses a tracked `set`. `insert --changeset`
-  marks the new diagram `change=(added, <cs>)`.
-* `insert` shifts the `tail[n]` keys of later areas; re-run `nsd-locate.mjs`.
-* Rendering and PlantUML syntax checking remain Specman's job. SVG and PNG blocks are not edited
-  by this script.
-
-== Editing intro and outro
-
-`nsd-locate.mjs`, `nsd-set-text.mjs` and `nsd-area.mjs` accept the selector `intro` or `outro`
-instead of a step (`--step intro`, alias `--block outro`). Title, description, trigger/result
-lists, business rules, acceptance criteria, the open-points table (`Offene Punkte`) etc. — the
-section names come from the vendored SUC template (German) — are thus addressable like step tails
-(`areas`, `tailAreas`, plus `sections` = the headings of each text block). Convenience options
-change only the affected part of the HTML block:
-
-[source,bash]
-----
-node scripts/nsd-set-text.mjs --file <file> --step intro --title "SUC-228.3 Mandant anlegen" --json
-node scripts/nsd-set-text.mjs --file <file> --step intro --area tail[1] --section Beschreibung --text "Zeile 1
-Zeile 2" --json
-node scripts/nsd-area.mjs --file <file> --step outro --op insert --kind text --position after:tail[0] --heading Akzeptanzkriterien --json
-----
-
-== catch blocks
-
-`scripts/nsd-catch.mjs` creates the matching `catch` for a `break` step (`--op add --break <id>`),
-changes its heading (`set-head`) or removes it (`remove`). The block lives in the `catchArea` of
-the break's sequence, or of the nearest enclosing sequence that may carry one (`main`, `while`,
-`subsequence`, if/else branch; `--parent` selects a higher one). It contains a placeholder step;
-further handler steps are added via `nsd-insert-step.mjs --parent <bodyKey>`. `nsd-locate.mjs` lists
-`catches` (with `bodyKey`) and `uncaughtBreaks`. `coCatch` is not supported.
-
-== Fixed step IDs
-
-`nsd-insert-step.mjs --id <8 hex>` keeps the ID of a step taken over from another specification,
-so that code references `SUC-xxx Step N (ID: ...)` stay stable. The ID must be unique across the
-whole diagram, otherwise an error is raised. The step number remains a placeholder (the sanitizer
-renumbers).
-
-== Example: complete spec from the template
-
-`test/example-full-spec.test.mjs` builds a complete specification from `reference/suc-template.nsd`
-(the vendored SUC template, German) exclusively via script calls (title, description, lists,
-business rules, acceptance criteria table, open points, step with fixed ID, `break` with `catch`,
-history) and checks it with the real sanitizer (only with `SPECMAN_JAR` set). As a CLI sequence:
-
-[source,bash]
-----
-node scripts/nsd-set-text.mjs --file <file> --step intro --title "SUC-228.3 Mandant anlegen" --json
-node scripts/nsd-set-text.mjs --file <file> --step intro --area tail[1] --section Beschreibung --text "..." --json
-node scripts/nsd-area.mjs --file <file> --step outro --op insert --kind text --position after:tail[0] --heading Akzeptanzkriterien --json
-node scripts/nsd-area.mjs --file <file> --step outro --op insert --kind table --position after:tail[1] --rows '[["Nr","Kriterium"],["1","..."]]' --cols '["10%","90%"]' --json
-node scripts/nsd-insert-step.mjs --file <file> --parent <sequence-key> --position end --kind simple --html "Mandant speichern" --id c0de1234 --json
-node scripts/nsd-insert-step.mjs --file <file> --parent <sequence-key> --position end --kind break --html "Name bereits vergeben" --json
-node scripts/nsd-catch.mjs --file <file> --op add --break <insertedStepId> --head "Name bereits vergeben" --json
-node scripts/nsd-history.mjs --file <file> --mode fill-initial --author "M. Mustermann" --json
-node scripts/sanitize.mjs --file <file> --json
-----
+* *Step moves with change tracking* (`source`/`target` pairs) — neither Specman nor the sanitizer
+  validates the `sourceStep=` link; a faulty reference crashes the GUI on load.
+* *Character-offset `markups=`, steplinks, `backup=`* — offsets are not validated; the skill never
+  writes them by hand and does not edit text that carries steplink markups without asking.
+* *Rendering or syntax checking of PlantUML* — the source text can be edited, Specman renders it.
+* *`.docx` migration* — removed in 2.0.0.
+* *Migration from V001 (legacy JSON)* — open and save once in Specman 1.3.0+.
+* *Consistency check of running-text cross-references between SUC files*.
 
 == sanitize and idempotence
 
-For specs with a leading empty `<div>` in intro/outro text blocks (the template!), the sanitizer
-reports `Plain text fields refreshed: 2` on every run, because it trims the regenerated `plain=`
-text when writing but compares it untrimmed. The file itself is unchanged from the second run on.
-After a `SANITIZED`, `sanitize.mjs` therefore performs a second run and reports `stable: true` if
-the file stays byte-identical — that is the idempotence statement, not the counter.
-
-== Changing diagram settings
-
-`scripts/nsd-edit-settings.mjs` reads/sets the `settings`/`pdfOptions` fields (zoom,
-changeset name, PDF page size, …), which previously only came from the template on creation and
-could never be changed by a script afterwards:
-
-[source,bash]
-----
-node scripts/nsd-edit-settings.mjs --file <file> --mode read --json
-node scripts/nsd-edit-settings.mjs --file <file> --mode set --key <key> --value <value> --json
-----
+`sanitize.mjs` rewrites the file *in place* — never run it on a file you have no backup of. For
+specs with a leading empty `<div>` in intro/outro text blocks (the template!), the sanitizer
+reports `Plain text fields refreshed` on every run; after a `SANITIZED`, `sanitize.mjs` performs a
+second run and reports `stable: true` if the file stays byte-identical — that is the idempotence
+statement, not the counter.
 
 == Configuration
 
@@ -277,61 +116,15 @@ author: <abbreviated name for the document history, e.g. "M. Mustermann">
 ---
 ----
 
-`author` is asked for interactively the first time a history row is written (first name abbreviated
-to an initial, last name written out) and is remembered here afterwards — no further prompting.
+`author` is asked for the first time a history row is written (first name abbreviated to an initial)
+and is remembered here (`scripts/specman-config.mjs`).
 
 == Document history
 
-`plan` and `edit` maintain the table `Dokumentenhistorie / UC-Lifecycle` (document history / UC
-lifecycle) in the `intro` block via `scripts/nsd-history.mjs` (the table lies outside every step and
-is otherwise unreachable with the step-addressing scripts). The table's column headers in the
-vendored SUC template (German) are `Aktivität` (activity), `Autor` (author) and `Datum` (date); the
-history detection (`nsd-history`, docx reader) accepts German and English headers
-(Activity/Aktivität, Author/Autor, Date/Datum):
-
-* **On creation** (`plan`) it fills the row `0.1 | Initiale Erstellung` (initial creation)
-  pre-populated by the template with author, today's date and the follow-up action `Review`
-  (default: a freshly planned spec awaits its review; can be deselected with `--followup -` — this
-  is a placeholder value, not a self-written review row).
-* **On every edit** (`edit`) it appends **one** summarizing row at the end of **one** editing run —
-  not one per individual change. The version number is suggested (pure wording change →
-  `x.(y+1)`, added/removed steps or changed flow → `(x+1).1`) and always confirmed by asking; the
-  follow-up action (`-` or `Review`) is asked for.
-* **The plugin never writes review rows** — a review is a manual process; the review row carries
-  the reviewed version number, not `-`.
-* History rows carry **no change mark**: the grammar has no `change=` at table row/cell level
-  (unlike for steps).
-
-== No entry-confirmation hook (deliberate decision)
-
-This plugin has **no** `PreToolUse` hook that forces a confirmation before a mutating skill
-starts. Rationale: every mutation either goes through the sanitizer itself (which reports
-`OK`/`SANITIZED`/`ERROR` immediately at every step, thus giving instant feedback) or ends up in a
-Git repo, where it can be diffed and reverted. Should this prove insufficient (e.g. for accidental
-edits of the wrong `.nsd` file), a `PreToolUse` hook can be added via `hooks/hooks.json`.
-
-== What the plugin does not do
-
-* **Step moves with change tracking** (`source`/`target` step pairs) — Specman validates the
-  `sourceStep=` link nowhere; a faulty reference crashes the GUI on load. Remains a manual Specman
-  action.
-* **SVG diagrams, and rendering or syntax checking of PlantUML** — PlantUML source can be read,
-  changed and created with `nsd-plantuml.mjs` (see <<plantuml,PlantUML diagrams>>), but Specman does
-  the rendering and the PlantUML syntax checking; the script only validates the `@start…`/`@end…`
-  frame. SVG and PNG image blocks are preserved intact but not edited by this plugin: image
-  insertion via `nsd-insert-image.mjs` and the Word migration produce PNG images only. Add or edit
-  SVG blocks in Specman.
-* **PDF export itself** (the `pdfOptions` fields can be changed via `nsd-edit-settings.mjs`, but the
-  export operation cannot) — the sanitizer jar offers no CLI operation for it, only `--sanitize`.
-* **Automatic migration from V001 (legacy JSON) to V2** — must be done once manually in Specman
-  1.3.0+ (open, save). `migrate` produces V2 only and reports existing non-V2 target files before
-  they are overwritten.
-* **Migration of Word comments, footnotes, text boxes and OLE objects** — comments are ignored,
-  the rest is listed in the migration report but not carried over.
-* **Nested lists** — Specman does not know them; `migrate` flattens deeper levels with
-  indentation and points this out.
-* **Consistency check of running-text cross-references between SUC files** (e.g. "See
-  SUC-902.1.2") — not yet part of this plugin.
+`plan` fills the template row `0.1 | Initiale Erstellung` (author, today's date, follow-up `Review`);
+`edit` appends *one* row per editing pass with a suggested, confirmed version number (wording-only
+change → `x.(y+1)`, added/removed steps or changed flow → `(x+1).1`). The plugin never writes review
+rows. History rows carry no change mark (the grammar has none at row level).
 
 == Development
 
@@ -340,19 +133,8 @@ edits of the wrong `.nsd` file), a `PreToolUse` hook can be added via `hooks/hoo
 node --test "test/**/*.test.mjs"
 ----
 
-The parser/serializer tests contain round-trip checks against the vendored reference files under
-`reference/`. After every change to `scripts/lib/nsd-ast.mjs`, additionally check against the real
-jar (assuming `SPECMAN_JAR` is set):
-
-[source,bash]
-----
-node scripts/sanitize.mjs --file reference/specman-reference-v1.4-model-v2.nsd --json
-----
-
-Should return `OK` — the serializer already produces canonical text. (With `SPECMAN_JAR` set,
-`test/nsd-v14.test.mjs` checks this automatically: parse the reference file, serialize it, have the
-real jar sanitize it.)
-
-For the origin and updating of the vendored files, see `VENDORING.md`.
+`scripts/` holds `sanitize.mjs`, `resolve-jar.mjs`, `specman-config.mjs`, `sync-refs.mjs` and the
+two helpers in `scripts/lib/`. For the origin and updating of the vendored files in `reference/`,
+see `VENDORING.md`.
 
 _Keywords: specman, specification, suc, nsd_

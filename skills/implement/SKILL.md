@@ -14,59 +14,43 @@ allowed-tools:
 
 # implement
 
+Never modify the `.nsd` itself with this skill — that is the `edit` skill's job.
+
 ## Step 1 — Read the specification
 
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/nsd-locate.mjs" --file <suc-file> --json
-```
-
-If the call fails with a hint about V001/`modelType`: stop, ask the user to open and save the file
-once in Specman 1.3.0+. `sequences` gives an overview of the structure (number of main steps per
-sequence); for the full flow text, query each main step specifically with `--step` (see the
-`edit` skill for addressing).
+`Read` the `.nsd` — or its `<file>.nsd.wrk` working copy if one exists (the spec is open in Specman
+and the `.wrk` is the current state). Step lines look like `kind(stepNum, stepId, `html`, plain=`...`)`;
+the `plain=` text is the readable step text, nesting (`{ }`) is the flow structure. If the header
+comment names an old `modelType` (V001), stop: the user must open and save it once in Specman 1.3.0+.
 
 ## Step 2 — Assess the scope
 
-Rough guideline: more than ~15-20 steps in total, several actors, or several independent
-exception paths suggest "large". When in doubt, ask rather than guess.
+Rough guideline: more than ~15–20 steps, several actors, or several independent exception paths
+suggest "large". When in doubt, ask.
 
-**For a large scope:**
+**Large:** tell the user "The SUC to be implemented is very large. Instead of implementing it directly,
+I would create a phased implementation plan." and confirm via `AskUserQuestion` (`header: "Scope"`).
+If yes, write a phase plan as a Markdown file (location: ask; default next to the `.nsd`). Per phase:
+step range (step IDs), affected components/files, dependencies on other phases, acceptance criterion.
+Then state explicitly: **the phases are implemented in separate sessions** — do not continue
+implementing in this session, not even partially.
 
-> "The SUC to be implemented is very large. Instead of implementing it directly, I would create a
-> phased implementation plan."
-
-`AskUserQuestion` (`header: "Scope"`) — agreement? If yes: create a phase plan as a Markdown file
-(location by follow-up question; without a preference, next to the `.nsd` file). Per phase: step
-range (step IDs from `nsd-locate`), affected components/files, dependencies on other phases, and
-an acceptance criterion. Then state explicitly: **the phases are implemented in separate
-sessions** — do not continue with the implementation in this session, not even partially.
-
-**For a small scope:** continue with Step 3.
+**Small:** continue with Step 3.
 
 ## Step 3 — Implement directly
 
-Normal implementation work — follow existing patterns in the target project, tests as is usual
-in the project. In addition, where a method/class implements a step of the specification, add a
-reference in the Javadoc or JSDoc comment:
+Normal implementation work: follow the target project's patterns and testing habits. Where a
+method/class implements a step, add to its Javadoc/JSDoc comment:
 
 ```
 SUC-<number> Step <current-number> (ID: <id>)
 ```
 
-**Always take the current number and ID fresh from `nsd-locate`**, never copy them from memory or
-from an old reference in the code — step numbers shift with every sanitize round.
-
-If you come across an existing reference whose number no longer matches the current state of the
-`.nsd` file: the ID is the stable anchor, correct the number (see also the standalone `sync-refs`
-skill for a whole file/project run). Older comments may use the legacy German keyword `Schritt`
-instead of `Step` (`SUC-<number> Schritt <n> (ID: <id>)`); when correcting those, change only the
-number and keep the keyword the comment already uses.
+Take the current number and ID **fresh from the `.nsd` file you just read**, never from memory or an old
+code comment — numbers shift whenever the spec is sanitized. For an existing reference whose number
+is stale, the ID is the stable anchor: correct the number. Legacy comments may use the German keyword
+`Schritt`; change only the number and keep the keyword.
 
 ## Step 4 — Keep references in sync
 
-After the implementation, or when only existing references should be refreshed without changing
-anything else:
-
-```
-/specman:sync-refs
-```
+For a whole file or project run, or to refresh references without other changes: `/specman:sync-refs`.

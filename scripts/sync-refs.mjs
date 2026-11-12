@@ -9,11 +9,9 @@
 //
 // Usage: node sync-refs.mjs --file <source-file> --spec-dir <dir-containing-suc-nsd-files> --json
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { isMainModule, report, parseArgs } from './lib/cli.mjs';
-import { parseDiagram } from './lib/nsd-ast.mjs';
-import { findStep } from './lib/nsd-paths.mjs';
 
 const REF_RE = /SUC-(\d+(?:\.\d+)*)\s+(Step|Schritt)\s+(\S+)\s+\(ID:\s*([0-9a-f]{8})\)/g;
 
@@ -25,15 +23,13 @@ export function extractRefs(text) {
   return refs;
 }
 
+// Every step line starts with `<kind>(<stepNum>, <stepId>, ...` (see SpecmanModel_V002.g4), so the
+// current number of a step is found by its ID with a line-anchored match — no parser needed. The
+// anchor keeps an ID that merely appears inside text content from matching.
 export function resolveCurrentStepNum(nsdText, stepId) {
-  let ast;
-  try {
-    ast = parseDiagram(nsdText);
-  } catch {
-    return null;
-  }
-  const found = findStep(ast, { stepId });
-  return found ? found.step.stepNum : null;
+  const re = new RegExp(String.raw`^[ \t]*\w+\(\s*(\d+[a-z]?(?:\.\d+[a-z]?)*)\s*,\s*${stepId}\s*,`, 'm');
+  const m = re.exec(nsdText);
+  return m ? m[1] : null;
 }
 
 /** `findNsd(sucNumber)` returns the .nsd file's text content, or null/undefined if not found. */
@@ -58,8 +54,9 @@ export function applySyncRefs(text, findNsd) {
 }
 
 // Recursively searches `specDir` for a file named `SUC-<sucNumber> ....nsd` (exact number match
-// on the leading token, any title after it) and returns its text, or null if none is found.
-function findNsdInDir(specDir, sucNumber) {
+// on the leading token, any title after it) and returns its text, or null if none is found. If a
+// `<file>.nsd.wrk` working copy exists the spec is open in Specman, so that copy is the current one.
+export function findNsdInDir(specDir, sucNumber) {
   const wanted = `SUC-${sucNumber} `;
   const wantedExact = `SUC-${sucNumber}.nsd`;
   const stack = [specDir];
@@ -73,7 +70,8 @@ function findNsdInDir(specDir, sucNumber) {
       try { stat = statSync(full); } catch { continue; }
       if (stat.isDirectory()) { stack.push(full); continue; }
       if (entry.endsWith('.nsd') && (entry.startsWith(wanted) || entry === wantedExact)) {
-        return readFileSync(full, 'utf8');
+        const wrk = `${full}.wrk`;
+        return readFileSync(existsSync(wrk) ? wrk : full, 'utf8');
       }
     }
   }

@@ -111,7 +111,6 @@ statement, not the counter.
 ----
 ---
 specDir: <path to the project-specific SUC folder>
-defaultChangeset: yellow
 author: <abbreviated name for the document history, e.g. "M. Mustermann">
 ---
 ----
@@ -124,7 +123,8 @@ and is remembered here (`scripts/specman-config.mjs`).
 `plan` fills the template row `0.1 | Initiale Erstellung` (author, today's date, follow-up `Review`);
 `edit` appends *one* row per editing pass with a suggested, confirmed version number (wording-only
 change → `x.(y+1)`, added/removed steps or changed flow → `(x+1).1`). The plugin never writes review
-rows. History rows carry no change mark (the grammar has none at row level).
+rows. In change mode the new row is marked like any added element
+(`change=(added, <changeset>)` on its cells, as in the reference file).
 
 == Development
 

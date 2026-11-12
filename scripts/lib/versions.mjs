@@ -1,5 +1,4 @@
-// versions.mjs — dotted-version helpers shared by resolve-jar.mjs (jar vs. spec) and nsd-ast.mjs
-// (spec vs. the model format this plugin knows).
+// versions.mjs — dotted-version helpers shared by resolve-jar.mjs (jar vs. spec versions).
 
 // Only the leading numeric dotted part counts: "1.4.0-SNAPSHOT" and "1.4.0" compare equal, so a
 // pre-release suffix never produces NaN (and thereby a bogus "newer" verdict).

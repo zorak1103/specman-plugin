@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRefs, resolveCurrentStepNum, applySyncRefs } from '../scripts/sync-refs.mjs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { extractRefs, resolveCurrentStepNum, applySyncRefs, findNsdInDir } from '../scripts/sync-refs.mjs';
 
 test('extractRefs finds a Java-Javadoc-style SUC reference', () => {
   const src = '/** SUC-902 Schritt 1.4.5 (ID: a6c0af76) */\nvoid doThing() {}\n';
@@ -77,4 +80,39 @@ test('applySyncRefs reports unresolved references in English', () => {
   assert.equal(result.unresolved[0].reason, 'spec file not found');
   const gone = applySyncRefs('SUC-1 Step 1 (ID: ffffffff)\n', (n) => (n === '1' ? nsdWithTwoSteps : null));
   assert.equal(gone.unresolved[0].reason, 'ID no longer present in the spec');
+});
+
+const referenceNsd = readFileSync(new URL('../reference/specman-reference-v1.4-model-v2.nsd', import.meta.url), 'utf8');
+
+test('resolveCurrentStepNum works on the 1.4 reference file (nested step)', () => {
+  assert.equal(resolveCurrentStepNum(referenceNsd, 'a6c0af76'), '2.1');
+  assert.equal(resolveCurrentStepNum(referenceNsd, '5582897d'), '1');
+});
+
+test('resolveCurrentStepNum handles CRLF line endings', () => {
+  const crlf = referenceNsd.replace(/\r?\n/g, '\r\n');
+  assert.equal(resolveCurrentStepNum(crlf, 'a6c0af76'), '2.1');
+});
+
+test('resolveCurrentStepNum ignores an ID that appears only in text content', () => {
+  const nsdText = 'mainSequence {\n    simple(4, a6c0af76, `see ffffffff here and simple(9, ffffffff, x`, plain=`x`);\n}\n';
+  assert.equal(resolveCurrentStepNum(nsdText, 'ffffffff'), null);
+});
+
+test('findNsdInDir prefers the .nsd.wrk working copy over the .nsd', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'sync-refs-'));
+  try {
+    writeFileSync(path.join(dir, 'SUC-1 Demo.nsd'), 'disk');
+    writeFileSync(path.join(dir, 'SUC-1 Demo.nsd.wrk'), 'working copy');
+    assert.equal(findNsdInDir(dir, '1'), 'working copy');
+    assert.equal(findNsdInDir(dir, '2'), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveCurrentStepNum resolves step numbers with a letter suffix (grammar: 3.2.4.2b)', () => {
+  const nsdText = 'mainSequence {\n    simple(3.2.4.2b, abcdef12, `x`, plain=`x`);\n    simple(4a, 12345678, `y`, plain=`y`);\n}\n';
+  assert.equal(resolveCurrentStepNum(nsdText, 'abcdef12'), '3.2.4.2b');
+  assert.equal(resolveCurrentStepNum(nsdText, '12345678'), '4a');
 });

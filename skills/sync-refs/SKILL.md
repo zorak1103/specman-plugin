@@ -24,7 +24,7 @@ for once.
 node "${CLAUDE_PLUGIN_ROOT}/scripts/sync-refs.mjs" --file <file> --spec-dir <folder> --json
 ```
 
-Call it individually for each affected file (Java and TypeScript/Angular files alike — the script
+If a `<file>.nsd.wrk` working copy exists next to a spec, the script reads that copy (the spec is open in Specman). Call it individually for each affected file (Java and TypeScript/Angular files alike — the script
 recognises both comment styles via the same pattern). It recognises both `Step` and the legacy
 German `Schritt` as the keyword; it rewrites only the number and keeps whichever keyword the
 comment already uses.
